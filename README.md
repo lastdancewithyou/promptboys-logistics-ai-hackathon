@@ -1,4 +1,4 @@
-# 🚢 Multi-Agent 기반 해상운송 의사결정 지원 시스템
+# 🚢 Multi-Agent 기반 선사 부킹 지원 시스템
 
 > **찾는 시간은 줄이고, 판단의 품질은 높이고, 경험은 회사에 남깁니다.**
 
@@ -68,15 +68,15 @@ AI의 추천만 저장하는 것이 아닙니다.
 
 ---
 
-## 🎬 Demo
+## 🎬 MVP
 
 > 실제 견적 요청부터 Multi-Agent 분석, 전략 추천, 담당자 피드백 및 재계획까지 하나의 workflow로 구성했습니다.
 
-- 🎥 **시연 영상 (YouTube) Demo**  
+- 🎥 **시연 영상 (YouTube)**  
 
 <!-- 🎥 시연 영상 (YouTube) Demo -->
 <section class="demo-video">
-  <h2>🎥 시연 영상 (YouTube) Demo</h2>
+  <h2>🎥 시연 영상 (YouTube)</h2>
   <p>Coming Soon</p>
 
   <div class="video-container">
@@ -91,6 +91,22 @@ AI의 추천만 저장하는 것이 아닙니다.
     </iframe>
   </div>
 </section>
+
+<!-- 🌐 웹 페이지 Demo -->
+<section class="demo-page">
+  <h2>🌐 웹 페이지 Demo</h2>
+  <p>Coming Soon</p>
+
+  <a
+    href="https://hyundai-glovis-maritime-logistics-agent.ai.studio/"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="demo-link"
+  >
+    웹 페이지 바로가기 →
+  </a>
+</section>
+
 ---
 
 ## 🧭 How It Works
@@ -98,7 +114,7 @@ AI의 추천만 저장하는 것이 아닙니다.
 사용자가 출발항·도착항, 희망 출항일, 화물 정보, 컨테이너 수량 등의 견적 요청을 입력하면 다음 workflow가 시작됩니다.
 
 <p align="center">
-  <img src="./agent_workflow_stage1_to_strategy_preview_white/.png" alt="Demo" width="800">
+  <img src="./image/.png" alt="Demo" width="800">
 </p>
 
 ---
