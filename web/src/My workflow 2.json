@@ -1,0 +1,3537 @@
+{
+  "name": "My workflow 2",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=다음 화주의 운송 요청을 기준으로 현재 해상운임 시장 방향과\n운송 위험을 분석하세요. 그리고 모든 분석 결과는 한국어로 수행하세요\n\n최종 선사를 선택하거나 특정 선사를 추천하지 마세요.\n별도의 Carrier Agent가 실제 견적과 선복을 비교하여 최종 선사를\n선택합니다.\n\n[운송 요청]\n\nPOL: {{ $('Generate Request ID').item.json.POL }}\nPOD: {{ $('Generate Request ID').item.json.POD }}\n\n출항 요청일:\n{{\n  !isNaN(Number($('Generate Request ID').item.json[\"Request_Departure_Date_Time\"]))\n    ? new Date(\n        Date.UTC(1899, 11, 30) +\n        Number($('Generate Request ID').item.json[\"Request_Departure_Date_Time\"]) * 86400000\n      ).toISOString().slice(0, 10)\n    : new Date($('Generate Request ID').item.json[\"Request_Departure_Date_Time\"])\n        .toISOString().slice(0, 10)\n}}\n해당 출항 요청일은 확정된 것이 아닙니다. SCFI 추세, 유가, 항만 위험, 계절적 기상 위험에 따라 실제 출항일은 목표일 전후로 조정될 수 있습니다.\n따라서 최종적으로 Market ai agent 가 하는 것은 출항 요청일 기준 전 후 1달까지 언제 출발하면 좋을 것인지 Overall cost, overall risk 를 평가하는 것입니다. \n\n화물: {{ $('Generate Request ID').item.json.Commodity_Description }}\n위험물 여부: {{ $('Generate Request ID').item.json.Dangerous_Goods }}\n컨테이너 수량: {{ $('Generate Request ID').item.json['Container 40'] }}\n상세 요청: {{ $('Generate Request ID').item.json[\"Details\"] }}\n\n[과거 날씨 조회기간]\n\n조회 시작일:\n{{\n(() => {\n  const value = $('Generate Request ID').item.json[\"Request_Departure_Date_Time\"];\n\n  const departure = !isNaN(Number(value))\n    ? new Date(\n        Date.UTC(1899, 11, 30) +\n        Number(value) * 86400000\n      )\n    : new Date(value);\n\n  return new Date(Date.UTC(\n    departure.getUTCFullYear() - 1,\n    departure.getUTCMonth() - 1,\n    1\n  )).toISOString().slice(0, 10);\n})()\n}}\n\n조회 종료일:\n{{\n(() => {\n  const value = $('Generate Request ID').item.json[\"Request_Departure_Date_Time\"];\n\n  const departure = !isNaN(Number(value))\n    ? new Date(\n        Date.UTC(1899, 11, 30) +\n        Number(value) * 86400000\n      )\n    : new Date(value);\n\n  return new Date(Date.UTC(\n    departure.getUTCFullYear() - 1,\n    departure.getUTCMonth() + 2,\n    0\n  )).toISOString().slice(0, 10);\n})()\n}}\n\n다음 순서로 연결된 Tool을 사용하세요.\n\n1. SCFI\n\nSCFI Tool을 정확히 한 번 호출하세요.\n\n반환된 데이터 중 구분 값이 SCFI인 행만 사용하고 CCFI는 제외하세요.\n등록일을 기준으로 정렬한 후 다음 값을 확인하세요.\n\n- 가장 최신 SCFI\n- 최신 SCFI의 기준일\n- 직전 발표 SCFI\n- 최근 4개 발표치 평균\n- 최근 시장 추세\n\nSCFI Trend는 다음 중 하나로 분류하세요.\n\n- RISING\n- FALLING\n- STABLE\n- MIXED\n- INSUFFICIENT_DATA\n\n판단 기준:\n\n- 최신 지수가 직전 지수와 최근 4개 평균보다 높고 최근 값이\n  대체로 상승하면 RISING\n- 최신 지수가 직전 지수와 최근 4개 평균보다 낮고 최근 값이\n  대체로 하락하면 FALLING\n- 최근 값의 변동이 작으면 STABLE\n- 상승과 하락이 반복되거나 단기 방향이 일관되지 않으면 MIXED\n- 비교 가능한 값이 부족하면 INSUFFICIENT_DATA\n\nSCFI는 Shanghai 출발 컨테이너 운임지수입니다.\n한국 출발 실제 운임이나 확정 견적으로 표현하지 말고,\n한국 출발 운임 방향을 판단하기 위한 참고지표로만 사용하세요.\n\n2. oil_price\n\noil_price Tool을 정확히 한 번 호출하세요.\n\n반환된 WTI 가격 이력에서 다음 값을 확인하세요.\n\n- 최신 WTI 가격\n- 최신 가격 기준일\n- 최근 가격 추세\n- 일반적인 연료비 압력\n- 향후 BAF 압력 가능성\n\nWTI Trend는 다음 중 하나로 분류하세요.\n\n- RISING\n- FALLING\n- STABLE\n- MIXED\n- INSUFFICIENT_DATA\n\nBAF Pressure는 다음 중 하나로 분류하세요.\n\n- POSSIBLE_INCREASE\n- POSSIBLE_DECREASE\n- STABLE_PRESSURE\n- UNCERTAIN\n- INSUFFICIENT_DATA\n\n3. historical_weather_lookup\n\nhistorical_weather_lookup Tool을 정확히 두 번 호출하세요.\n\nfreight_lookup_excel에서 좌표를 찾지 마세요.\n다음 승인된 항만 좌표를 직접 사용하세요.\n\n- BUSAN, KOREA 또는 Busan:\n  latitude = 35.10\n  longitude = 129.04\n\n- INCHEON, KOREA 또는 Incheon:\n  latitude = 37.45\n  longitude = 126.60\n\n- LOS ANGELES, USA 또는 Los Angeles:\n  latitude = 33.74\n  longitude = -118.26\n\n- NEW YORK, USA, NYC 또는 New York/New Jersey:\n  latitude = 40.67\n  longitude = -74.08\n\n첫 번째 호출:\n\n- POL 좌표 사용\n- 계산된 조회 시작일과 종료일 사용\n- POL 과거 계절 날씨로 구분\n\n두 번째 호출:\n\n- POD 좌표 사용\n- 동일한 조회 시작일과 종료일 사용\n- POD 과거 계절 날씨로 구분\n\n각 지역에서 다음 항목을 확인하세요.\n\n- 강수량이 많았던 날짜와 기간\n- 최대풍속이 높았던 날짜\n- 최대돌풍이 높았던 날짜\n- 반복된 악천후 패턴\n- 전년도 계절자료 기준 위험 수준\n\n날씨 위험은 다음 중 하나로 분류하세요.\n\n- LOW\n- MEDIUM\n- HIGH\n\n과거 자료를 미래의 실제 예보로 표현하지 마세요.\n전년도 동일 계절을 이용한 참고분석이라고 명시하세요.\n출발항과 도착항의 포인트 날씨를 전체 해상항로 분석으로 표현하지\n마세요.\n\n4. News\n\nNews Tool을 정확히 한 번 호출하세요.\n\n다음 대상과 관련된 최신 해운·항만 뉴스를 최대 10개 확인하세요.\n\n- POL\n- POD\n- 관련 주요 항만 및 항로\n- 해운시장 전반\n\n\n각 뉴스에 다음 내용을 포함하세요.\n\n- 제목\n- 발행일\n- 위험 수준\n- 현재 운송에 미칠 수 있는 영향\n- 출처 URL\n\n동일 사건의 중복 기사는 하나로 합치세요.\n종료된 사건을 현재 진행 중인 위험으로 표현하지 마세요.\n확인되지 않은 사건, 날짜 또는 URL을 생성하지 마세요.\n관련 뉴스가 없다면 빈 배열을 사용하세요.\n\n[종합 시장 판단]\n\nSCFI, WTI, 과거 계절 날씨와 최신 뉴스를 종합하여 다음을 판단하세요.\n\n1. Overall Cost Pressure\n\n다음 중 하나를 사용하세요.\n\n- LOW\n- MEDIUM\n- HIGH\n\n그리고 이렇게 생각한 것에 대해서 이유를 적으세요.\n\n2. Overall Market Risk\n\n다음 중 하나를 사용하세요.\n\n- LOW\n- MEDIUM\n- HIGH\n그리고 이렇게 생각한 것에 대해서 이유를 적으세요.\n\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are the market survey ai agent"
+        }
+      },
+      "id": "a70ac952-5226-44b3-91e9-d421dc2f976f",
+      "name": "6. Market Intelligence Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -928,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "gCaptain RSS에서 최신 해운 및 항만 뉴스를 조회한다.\n기사 제목, 발행일, 링크와 요약을 확인한다.\n항만 폐쇄, 혼잡, 파업, 선박 사고와 운항 차질 관련 기사만 선별한다.\n오래된 기사를 현재 사건으로 표현하지 않는다.",
+        "url": "https://gcaptain.com/feed/",
+        "options": {},
+        "optimizeResponse": true,
+        "responseType": "text"
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        -656,
+        480
+      ],
+      "id": "a5b32b89-3992-4636-80c6-b7ef8f0de1c2",
+      "name": "News"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Retrieve recent daily WTI crude-oil futures prices from Yahoo Finance\nand provide the data needed to evaluate the price trend.\n\nData location:\n- symbol: chart.result[0].meta.symbol\n- currency: chart.result[0].meta.currency\n- current market price:\n  chart.result[0].meta.regularMarketPrice\n- current market timestamp:\n  chart.result[0].meta.regularMarketTime\n- daily timestamps:\n  chart.result[0].timestamp\n- daily closing prices:\n  chart.result[0].indicators.quote[0].close\n\nMatch each daily timestamp with the closing price at the same array index.\nIgnore entries where the timestamp or closing price is null.\n\nUse the most recent valid daily closing observations to calculate:\n\n- latest valid closing price and date;\n- immediately preceding valid closing price;\n- change and percentage change from the preceding close;\n- closing price approximately 5 trading days earlier;\n- 5-trading-day percentage change;\n- closing price approximately 20 trading days earlier;\n- 20-trading-day percentage change;\n- average of the latest 5 valid closing prices;\n- average of the latest 20 valid closing prices.\n\nClassify the trend as:\n\n- RISING:\n  the latest 5-day average is above the latest 20-day average and\n  the 20-trading-day percentage change is positive;\n\n- FALLING:\n  the latest 5-day average is below the latest 20-day average and\n  the 20-trading-day percentage change is negative;\n\n- STABLE:\n  the absolute 20-trading-day percentage change is below 3%;\n\n- MIXED:\n  the moving-average direction and 20-day percentage change disagree,\n  or there is insufficient confirmation of a clear direction;\n\n- INSUFFICIENT_DATA:\n  fewer than 20 valid daily closing prices are available.\n\nReturn only:\n\n- symbol;\n- currency;\n- current market price;\n- current market timestamp;\n- latest valid close and date;\n- previous valid close and date;\n- 1-day percentage change;\n- 5-trading-day percentage change;\n- 20-trading-day percentage change;\n- 5-day average;\n- 20-day average;\n- trend classification;\n- a short factual trend explanation;\n- source URL.\n\nThis is a WTI crude-oil futures market indicator, not a marine\nbunker-fuel price.\n\nUse the trend only as a general indicator of possible fuel-cost\npressure. Do not calculate BAF, predict a guaranteed future price,\nor invent missing values.",
+        "url": "https://query1.finance.yahoo.com/v8/finance/chart/CL%3DF?range=3mo&interval=1d",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0"
+            }
+          ]
+        },
+        "options": {},
+        "optimizeResponse": true
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        -880,
+        480
+      ],
+      "id": "3bcc2745-d6fc-4529-a9f1-9d5abcda1e68",
+      "name": "oil_price"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"Market_agent\": {\n    \"market_context\": {\n      \"POL\": \"BUSAN, KOREA\",\n      \"POD\": \"LOS ANGELES, USA\",\n      \"Target_Departure\": \"2026-10-05\",\n      \"SCFI_Applicability\": \"한국 출발 운임 방향의 참고지표\"\n    },\n    \"SCFI_analysis\": {\n      \"Current_Level\": \"2185.40\",\n      \"Current_Level_Date\": \"2026-08-07\",\n      \"Previous_Level\": \"2112.70\",\n      \"Four_Week_Average\": \"2058.30\",\n      \"Trend\": \"RISING\",\n      \"Assessment\": \"SCFI 시장 방향 요약\"\n    },\n    \"fuel_analysis\": {\n      \"Latest_WTI_Price\": \"80.00\",\n      \"Price_Date\": \"2026-08-10\",\n      \"Trend\": \"RISING\",\n      \"BAF_Pressure\": \"POSSIBLE_INCREASE\",\n      \"Assessment\": \"일반적인 연료비 압력 요약\"\n    },\n    \"weather_analysis\": {\n      \"Historical_Period\": \"2025-09-01 ~ 2025-11-30\",\n      \"POL_Risk\": \"출발항 전년도 계절 위험 요약\",\n      \"POD_Risk\": \"도착항 전년도 계절 위험 요약\",\n      \"Overall_Risk\": \"LOW\",\n      \"Assessment\": \"과거 계절자료 기반 참고분석\"\n    },\n    \"maritime_news\": [\n      {\n        \"Title\": \"뉴스 제목\",\n        \"Date\": \"2026-08-10\",\n        \"Risk_Level\": \"MEDIUM\",\n        \"Summary\": \"뉴스 요약\",\n        \"Source_URL\": \"https://example.com\"\n      }\n    ],\n    \"market_summary\": {\n      \"Overall_Cost_Pressure\": \"HIGH\",\n      \"Overall_Market_Risk\": \"MEDIUM\"\n  }\n}\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -576,
+        160
+      ],
+      "id": "c0f800e9-4cfa-434d-9bef-ff8041a45218",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Retrieve all available weekly SCFI observations from Google Sheets.\n\nThe columns are:\n- 구분: index type;\n- 운임지수: index value;\n- 등록일: observation date;\n- 단위: displayed unit.\n\nUse only rows where 구분 equals SCFI.\nReturn all matching rows, not only the latest row.\n\nThe 운임지수 value may contain commas.\nTreat values such as \"3,276.14\" as the number 3276.14.\n\nSCFI is a Shanghai-origin freight-market index.\nIt is not a Busan-origin carrier quotation and must be used only as\na directional market indicator.",
+        "documentId": {
+          "__rl": true,
+          "value": "1Vb7VITvKwW9cwJuq3yjDwRHX614g2i0hddI20ygKwGk",
+          "mode": "list",
+          "cachedResultName": "국가물류통합정보센터_국외해상운임지수_260811",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vb7VITvKwW9cwJuq3yjDwRHX614g2i0hddI20ygKwGk/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1803107455,
+          "mode": "list",
+          "cachedResultName": "sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Vb7VITvKwW9cwJuq3yjDwRHX614g2i0hddI20ygKwGk/edit#gid=1803107455"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "구분",
+              "lookupValue": "SCFI"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -768,
+        480
+      ],
+      "id": "7463f4ee-2d69-4d90-9d0b-8171aa6a83e8",
+      "name": "SCFI",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://archive-api.open-meteo.com/v1/archive",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `Port latitude from the approved mapping.\nFor BUSAN, KOREA use 35.10.\nFor LOS ANGELES, USA use 33.74.\nReturn a number only.`, 'string') }}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `Port longitude from the approved mapping.\nFor BUSAN, KOREA use 129.04.\nFor LOS ANGELES, USA use -118.26.\nReturn a number only.`, 'string') }}"
+            },
+            {
+              "name": "start_date",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `Historical period start date in YYYY-MM-DD.\nUse the first day of the month before the departure month in the\nprevious year.\nExample: October 2026 → 2025-09-01.`, 'string') }}"
+            },
+            {
+              "name": "end_date",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `Historical period end date in YYYY-MM-DD.\nUse the final day of the month after the departure month in the\nprevious year.\nExample: October 2026 → 2025-11-30.`, 'string') }}"
+            },
+            {
+              "name": "daily",
+              "value": "=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max"
+            },
+            {
+              "name": "timezone",
+              "value": "=auto"
+            },
+            {
+              "name": "wind_speed_unit",
+              "value": "=kn"
+            },
+            {
+              "name": "cell_selection",
+              "value": "=nearest"
+            }
+          ]
+        },
+        "options": {},
+        "optimizeResponse": true
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        -992,
+        480
+      ],
+      "id": "b9b82b81-d119-49d4-b7c4-d54ecc359f03",
+      "name": "weather_lookup"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"POL\": \"{{ $json.body.POL }}\",\n  \"POD\": \"{{ $json.body.POD }}\",\n  \"Name\": \"{{ $json.body.Name }}\",\n  \"Company\": \"{{ $json.body.Company }}\",\n  \"Country\": \"{{ $json.body.Country }}\",\n  \"TEL\": \"{{ $json.body.TEL }}\",\n  \"E-mail\": \"{{ $json.body['E-mail'] }}\",\n  \"Incoterms\": \"{{ $json.body.Incoterms }}\",\n  \"Dangerous_Goods\": \"{{ $json.body.Dangerous_Goods }}\",\n  \"Request_Departure_Date_Time\": \"{{ $json.body.Request_Departure_Date_Time }}\",\n  \"Departure_Flexibility_Days\": {{ Number($json.body.Departure_Flexibility_Days || 14) }},\n  \"Shipping_Type\": \"{{ $json.body.Shipping_Type }}\",\n  \"Movement_Type\": \"{{ $json.body.Movement_Type }}\",\n  \"Commodity_Description\": \"{{ $json.body.Commodity_Description }}\",\n  \"Weight (kg)\": {{ Number(String($json.body['Weight (kg)'] || 0).replace(/,/g, '')) }},\n  \"Dimension (CBM)\": {{ Number($json.body['Dimension (CBM)'] || 0) }},\n  \"Container 40\": {{ Number($json.body['Container 40'] || 0) }},\n  \"Details\": \"{{ $json.body.Details }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1904,
+        160
+      ],
+      "id": "47db14f6-4a15-4cac-bb74-b75481f9091a",
+      "name": "기본전처리"
+    },
+    {
+      "parameters": {
+        "content": "## Post Process for Carrier Schedules\n",
+        "height": 240,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -688,
+        656
+      ],
+      "typeVersion": 1,
+      "id": "ee778d63-501e-4d6c-9d73-767e6cde2825",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const firstItem = $input.first();\nconst item = firstItem ? firstItem.json : {};\n\n\n// ====================================================\n// Utility Functions\n// ====================================================\n\nfunction parseMaybe(value) {\n  if (value === null || value === undefined) {\n    return {};\n  }\n\n  if (typeof value === 'object') {\n    return value;\n  }\n\n  const cleaned = String(value)\n    .trim()\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/i, '')\n    .replace(/```$/i, '')\n    .trim();\n\n  return JSON.parse(cleaned);\n}\n\n\nfunction toNumber(value, fallback = 0) {\n  if (\n    value === null ||\n    value === undefined ||\n    value === ''\n  ) {\n    return fallback;\n  }\n\n  const cleaned = String(value)\n    .replace(/,/g, '')\n    .replace(/USD/gi, '')\n    .replace(/KG/gi, '')\n    .replace(/CBM/gi, '')\n    .trim();\n\n  const num = Number(cleaned);\n\n  return Number.isFinite(num)\n    ? num\n    : fallback;\n}\n\n\nfunction toDate(value) {\n  if (!value) {\n    return null;\n  }\n\n  const date = new Date(value);\n\n  return Number.isNaN(date.getTime())\n    ? null\n    : date;\n}\n\n\n// ====================================================\n// 1. Parse Agent Output\n// ====================================================\n\nlet raw =\n  item.output ??\n  item.text ??\n  item.response ??\n  item;\n\nlet parsed = parseMaybe(raw);\n\n\n// output wrapper 제거\nif (\n  parsed &&\n  typeof parsed === 'object' &&\n  parsed.output !== undefined\n) {\n  parsed = parseMaybe(parsed.output);\n}\n\n\n// ====================================================\n// 2. Extract Carrier Schedules\n// ====================================================\n\nconst carrierSchedules =\n  parsed.Carrier_Schedules ?? {};\n\nconst hmmSchedules =\n  Array.isArray(carrierSchedules.HMM)\n    ? carrierSchedules.HMM\n    : [];\n\nconst mscSchedules =\n  Array.isArray(carrierSchedules.MSC)\n    ? carrierSchedules.MSC\n    : [];\n\nconst maerskSchedules =\n  Array.isArray(carrierSchedules.MAERSK)\n    ? carrierSchedules.MAERSK\n    : [];\n\n\n// ====================================================\n// 3. Extract Request Summary\n//    두 가지 nesting 모두 지원\n// ====================================================\n\nconst request =\n  parsed.Request_Summary ??\n  carrierSchedules.Request_Summary ??\n  {};\n\n\n// ====================================================\n// 4. Normalize Request\n// ====================================================\n\nconst requestedDepartureDate =\n  toDate(request.Request_Departure_Date_Time);\n\nconst requestedContainers =\n  toNumber(request.Container_40, 0);\n\nconst requestedWeight =\n  toNumber(request.Weight_KG, 0);\n\nconst requestedCBM =\n  toNumber(request.Dimension_CBM, 0);\n\n\n// Request Summary가 제대로 들어왔는지 검증\nif (!requestedDepartureDate) {\n  throw new Error(\n    `Request_Departure_Date_Time is missing or invalid. Request_Summary: ${JSON.stringify(request)}`\n  );\n}\n\nif (requestedContainers <= 0) {\n  throw new Error(\n    `Container_40 is missing or invalid. Request_Summary: ${JSON.stringify(request)}`\n  );\n}\n\n\n// ====================================================\n// 5. Schedule Evaluation\n// ====================================================\n\nfunction evaluateSchedule(schedule) {\n\n  const etd =\n    toDate(schedule.ETD);\n\n  const availableContainers =\n    toNumber(\n      schedule.Available_Container,\n      0\n    );\n\n  const maxPayloadPerContainer =\n    toNumber(\n      schedule.Max_Payload_KG_Per_Container,\n      0\n    );\n\n  const maxCbmPerContainer =\n    toNumber(\n      schedule.Max_CBM_Per_Container,\n      0\n    );\n\n\n  // --------------------------------------------------\n  // Condition 1\n  // ETD >= Requested Departure Date\n  // --------------------------------------------------\n\n  const etdPassed =\n    etd !== null &&\n    etd >= requestedDepartureDate;\n\n\n  // --------------------------------------------------\n  // Condition 2\n  // Available containers >= Requested containers\n  // --------------------------------------------------\n\n  const containerPassed =\n    availableContainers >= requestedContainers;\n\n\n  // --------------------------------------------------\n  // Condition 3\n  // Total capacity of requested containers\n  // --------------------------------------------------\n\n  const totalPayloadCapacity =\n    availableContainers *\n    maxPayloadPerContainer;\n\n  const totalCbmCapacity =\n    availableContainers *\n    maxCbmPerContainer;\n\n\n  const weightPassed =\n    totalPayloadCapacity >=\n    requestedWeight;\n\n  const cbmPassed =\n    totalCbmCapacity >=\n    requestedCBM;\n\n\n  // --------------------------------------------------\n  // Final Eligibility\n  // --------------------------------------------------\n\n  const eligible =\n    etdPassed &&\n    containerPassed &&\n    weightPassed &&\n    cbmPassed;\n\n\n  return {\n    ...schedule,\n\n    Eligibility: {\n      ETD_Passed: etdPassed,\n      Container_Passed: containerPassed,\n      Weight_Passed: weightPassed,\n      CBM_Passed: cbmPassed,\n      Eligible: eligible\n    },\n\n    Capacity_Check: {\n      Requested_Containers:\n        requestedContainers,\n\n      Requested_Weight_KG:\n        requestedWeight,\n\n      Requested_CBM:\n        requestedCBM,\n\n      Max_Payload_KG_Per_Container:\n        maxPayloadPerContainer,\n\n      Max_CBM_Per_Container:\n        maxCbmPerContainer,\n\n      Total_Payload_Capacity_KG:\n        totalPayloadCapacity,\n\n      Total_CBM_Capacity:\n        totalCbmCapacity\n    }\n  };\n}\n\n\n// ====================================================\n// 6. Evaluate\n// ====================================================\n\nconst evaluatedHMM =\n  hmmSchedules.map(evaluateSchedule);\n\nconst evaluatedMSC =\n  mscSchedules.map(evaluateSchedule);\n\nconst evaluatedMAERSK =\n  maerskSchedules.map(evaluateSchedule);\n\n\n// ====================================================\n// 7. Filter Eligible Schedules\n// ====================================================\n\nconst filteredHMM =\n  evaluatedHMM.filter(\n    row => row.Eligibility.Eligible\n  );\n\nconst filteredMSC =\n  evaluatedMSC.filter(\n    row => row.Eligibility.Eligible\n  );\n\nconst filteredMAERSK =\n  evaluatedMAERSK.filter(\n    row => row.Eligibility.Eligible\n  );\n\n\n// ====================================================\n// 8. Final Output\n// ====================================================\n\nreturn [\n  {\n    json: {\n\n      Carrier_Schedules: {\n        HMM: filteredHMM,\n        MSC: filteredMSC,\n        MAERSK: filteredMAERSK\n      },\n\n      Filter_Metadata: {\n\n        original_rows: {\n          HMM: hmmSchedules.length,\n          MSC: mscSchedules.length,\n          MAERSK: maerskSchedules.length,\n\n          total:\n            hmmSchedules.length +\n            mscSchedules.length +\n            maerskSchedules.length\n        },\n\n        filtered_rows: {\n          HMM: filteredHMM.length,\n          MSC: filteredMSC.length,\n          MAERSK: filteredMAERSK.length,\n\n          total:\n            filteredHMM.length +\n            filteredMSC.length +\n            filteredMAERSK.length\n        },\n\n        filters_applied: [\n          \"ETD >= Request_Departure_Date_Time\",\n          \"Available_Container >= Container_40\",\n          \"Available_Container × Max_Payload_KG_Per_Container >= Weight_KG\",\n          \"Available_Container × Max_CBM_Per_Container >= Dimension_CBM\"\n        ]\n      },\n\n      Request_Summary: request\n    }\n  }\n];"
+      },
+      "id": "a3bbddf8-eb27-4fcb-a381-78817708ebd8",
+      "name": "Post-Proecssing From JSON Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        720
+      ],
+      "notes": "[후처리 코드] \n\n기준 : Request_Summary에 적힌 내용 (고객의 의뢰서) \n\n후처리 과정 : \n\n1) Carrier_Schedules의 ETD가 Request_Departure_Date_Time을 기준으로 동일하거나 이후인지 확인 \n\n2) Available_Container의 개수가 Container_40 이상인가? \n\n3) Max_Payload_KG_Per_Container * Available Container >=  Weight_KG?\n\n4) Max_CBM_Per_Container  * Available Container >= DImension_CBM?"
+    },
+    {
+      "parameters": {
+        "content": "## Get Carrier Schedules from the Carrier Systems\n",
+        "height": 592,
+        "width": 432,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1312,
+        1056
+      ],
+      "typeVersion": 1,
+      "id": "ca008bc8-73d1-4f06-b916-fa7902ef8f1a",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"Carrier_Schedules\": {\n    \"HMM\": [],\n    \"MSC\": [],\n    \"MAERSK\": []\n  },\n\n  \"Request_Summary\": {\n    \"POL\": \"\",\n    \"POD\": \"\",\n    \"Request_Departure_Date_Time\": \"\",\n    \"Container_40\": 0,\n    \"Weight_KG\": 0,\n    \"Dimension_CBM\": 0,\n    \"Dangerous_Goods\": \"\"\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -784,
+        896
+      ],
+      "id": "a542bcf9-9d8f-40c2-844b-4250629abbab",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search historical shipping contracts to find relevant past cases for evaluating candidate schedules. Use this tool to examine past carrier performance, departure and arrival delays, claims, final costs, customer satisfaction, and operational risks. Prefer contracts with similar POL, POD, carrier, and route characteristics. Use historical records as supporting evidence when evaluating current schedule candidates.",
+        "documentId": {
+          "__rl": true,
+          "value": "1Fir2qKHfaRONACztjpr3XVlnsbOWev57jKkfALJc97M",
+          "mode": "list",
+          "cachedResultName": "Contract_History_Demo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Fir2qKHfaRONACztjpr3XVlnsbOWev57jKkfALJc97M/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1395497868,
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Fir2qKHfaRONACztjpr3XVlnsbOWev57jKkfALJc97M/edit#gid=1395497868"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        192,
+        368
+      ],
+      "id": "f6517711-f59d-4f18-aec6-8815e9261e1d",
+      "name": "Contract history",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "8851620278",
+        "text": "={{ $json.telegram_message }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "💰 Approve A",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Processing for sending message').item.json.Context.decision_id + '|APPROVE|OPT-A' }}"
+                    }
+                  },
+                  {
+                    "text": "⚡ Approve B",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Processing for sending message').item.json.Context.decision_id + '|APPROVE|OPT-B' }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "⚖️ Approve C",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Processing for sending message').item.json.Context.decision_id + '|APPROVE|OPT-C' }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Reject",
+                    "additionalFields": {
+                      "callback_data": "={{ $('Processing for sending message').item.json.Context.decision_id + '|REJECT|NONE' }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        752,
+        176
+      ],
+      "id": "68f8547e-2b1c-4817-80f0-93153c37d479",
+      "name": "Send a text message",
+      "webhookId": "9a990980-bc0f-4b0a-8f75-583bd2797fb4",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output;\n\n// ```json ... ``` 형태의 Markdown code fence가 있으면 제거\nconst cleaned = raw\n  .replace(/```json\\s*/gi, '')\n  .replace(/```\\s*/g, '')\n  .trim();\n\nconst parsed = JSON.parse(cleaned);\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        176
+      ],
+      "id": "617db15f-d325-41c2-b8c0-56902e9885a8",
+      "name": "Agent output processing"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Current Strategy Agent output\nconst c = input.Context;\n\nconst lowest = c.options.lowest_cost;\nconst fastest = c.options.fastest_arrival;\nconst balanced = c.options.balanced;\n\n// AI preferred option\nconst recommendationMap = {\n  lowest_cost: \"OPTION A · LOWEST COST\",\n  fastest_arrival: \"OPTION B · FASTEST ARRIVAL\",\n  balanced: \"OPTION C · BALANCED\"\n};\n\nconst preferred =\n  recommendationMap[c.ai_preferred_option] ??\n  c.ai_preferred_option ??\n  \"N/A\";\n\n// Helper for safe values\nconst value = (v) =>\n  v === null || v === undefined || v === \"\" ? \"N/A\" : v;\n\n\n// Telegram message\nconst telegramMessage = `\n📦 BOOKING STRATEGY RECOMMENDATION\n\n🆔 Decision: ${c.decision_id}\n\n━━━━━━━━━━━━━━━━━━━━\n💰 OPTION A · LOWEST COST\n\n🚢 ${value(lowest.Carrier)}\n📅 ${value(lowest.ETD)} → ${value(lowest.ETA)}\n💵 USD ${value(lowest.Calculated_Total_Cost_USD)}\n⏱ Transit: ${value(lowest.Transit_Days)} days\n⚠️ Risk: ${value(lowest.Risk_Level)}\n\n💡 Why this option?\n${value(lowest.selection_reason)}\n\n━━━━━━━━━━━━━━━━━━━━\n⚡ OPTION B · FASTEST ARRIVAL\n\n🚢 ${value(fastest.Carrier)}\n📅 ${value(fastest.ETD)} → ${value(fastest.ETA)}\n💵 USD ${value(fastest.Calculated_Total_Cost_USD)}\n⏱ Transit: ${value(fastest.Transit_Days)} days\n⚠️ Risk: ${value(fastest.Risk_Level)}\n\n💡 Why this option?\n${value(fastest.selection_reason)}\n\n━━━━━━━━━━━━━━━━━━━━\n⚖️ OPTION C · BALANCED\n\n🚢 ${value(balanced.Carrier)}\n📅 ${value(balanced.ETD)} → ${value(balanced.ETA)}\n💵 USD ${value(balanced.Calculated_Total_Cost_USD)}\n⏱ Transit: ${value(balanced.Transit_Days)} days\n⚠️ Risk: ${value(balanced.Risk_Level)}\n\n💡 Why this option?\n${value(balanced.selection_reason)}\n\n━━━━━━━━━━━━━━━━━━━━\n🤖 AI RECOMMENDATION\n\n${preferred}\n\nPlease review the options and select an action below.\n`.trim();\n\nreturn [\n  {\n    json: {\n      ...input,\n      telegram_message: telegramMessage\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        176
+      ],
+      "id": "f4943a4d-75ee-49c9-b425-442f70e88185",
+      "name": "Processing for sending message"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        256,
+        896
+      ],
+      "id": "7d8ea031-32af-4289-9035-52aeea111fbe",
+      "name": "Selected botton",
+      "webhookId": "558bd2c5-d7f8-49df-81d9-d61a63f3f9f3",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "APPROVE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "63148e27-719b-4824-ae41-28c0d4ea7813"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "046e918b-408f-40c2-a137-fedc98aec48f",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "REJECT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        896
+      ],
+      "id": "fcbfb038-d3cf-4110-b64b-dd2398879351",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Decision_id": "={{ $json.decision_id }}",
+            "Human_status": "={{ $json.action }}"
+          },
+          "matchingColumns": [
+            "Decision_id"
+          ],
+          "schema": [
+            {
+              "id": "Decision_id",
+              "displayName": "Decision_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lowest_cost",
+              "displayName": "Lowest_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_arrival",
+              "displayName": "Fastest_arrival",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Balanced",
+              "displayName": "Balanced",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_status",
+              "displayName": "Human_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_selected_option",
+              "displayName": "Human_selected_option",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_coment",
+              "displayName": "Human_coment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        816,
+        784
+      ],
+      "id": "719d07b1-6e52-4960-8776-62b51df8e4d4",
+      "name": "Update context (POS)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Human_status": "AWAITING_FEEDBACK",
+            "Human_selected_option": "NONE",
+            "Decision_id": "={{ $json.decision_id }}"
+          },
+          "matchingColumns": [
+            "Decision_id"
+          ],
+          "schema": [
+            {
+              "id": "Decision_id",
+              "displayName": "Decision_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lowest_cost",
+              "displayName": "Lowest_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_arrival",
+              "displayName": "Fastest_arrival",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Balanced",
+              "displayName": "Balanced",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_status",
+              "displayName": "Human_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_selected_option",
+              "displayName": "Human_selected_option",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_coment",
+              "displayName": "Human_coment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        832,
+        1120
+      ],
+      "id": "3678def6-75fe-4328-9700-39bfdcd632c6",
+      "name": "Update context (NEG)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Selected botton').item.json.callback_query.message.chat.id }}",
+        "text": "=✅ BOOKING DECISION RECORDED  Decision ID: {{ $('parsing button response').item.json.decision_id }} Selected Option: {{ $('parsing button response').item.json.selected_option }} Status: APPROVED  The manager's decision has been saved to the Context DB.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        640
+      ],
+      "id": "5cf0f7ca-bfef-4261-bd41-8fe7332afb52",
+      "name": "Confirmation",
+      "webhookId": "f4b76033-940d-4feb-b9ee-a460a5bc95f1",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Selected botton').item.json.callback_query.message.chat.id }}",
+        "text": "=❌ RECOMMENDATION REJECTED\n\nDecision ID: {{ $('parsing button response').item.json.decision_id }}\n\nPlease tell me why you rejected these options.\n\nReply with your reason below.\n\nExample:\n\"Transit time is too long.\"",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        944
+      ],
+      "id": "bd076a04-b442-4da7-8dd6-caed036e62b4",
+      "name": "Rejection Confirmation",
+      "webhookId": "f4b76033-940d-4feb-b9ee-a460a5bc95f1",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        1168,
+        768
+      ],
+      "id": "b618f50f-69c4-4296-b1fa-9033509db0d8",
+      "name": "Human Feedback",
+      "webhookId": "1028fce7-fff4-4f71-a999-4722ee78ac08",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Human_status",
+              "lookupValue": "AWAITING_FEEDBACK"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1968,
+        336
+      ],
+      "id": "b060783f-437a-4a5b-9e05-79c84ded255d",
+      "name": "Parsing current item",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Decision_id": "={{ $json.Decision_id }}",
+            "Human_coment": "={{ $('Human Feedback').item.json.message.text }}",
+            "Human_selected_option": "NONE",
+            "Human_status": "REJECTED"
+          },
+          "matchingColumns": [
+            "Decision_id"
+          ],
+          "schema": [
+            {
+              "id": "Decision_id",
+              "displayName": "Decision_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Lowest_cost",
+              "displayName": "Lowest_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_arrival",
+              "displayName": "Fastest_arrival",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Balanced",
+              "displayName": "Balanced",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_status",
+              "displayName": "Human_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_selected_option",
+              "displayName": "Human_selected_option",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_coment",
+              "displayName": "Human_coment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2176,
+        336
+      ],
+      "id": "955816a2-dc28-4ad7-9eb6-514bb281599a",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Human Feedback').item.json.message.chat.id }}",
+        "text": "=📝 FEEDBACK RECORDED  Decision ID: {{ $('Parsing current item').item.json.Decision_id }}  Your feedback has been saved successfully.  Thank you for reviewing the booking recommendation.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        336
+      ],
+      "id": "83816be8-8ce5-4bc9-9c61-5810f1d79f09",
+      "name": "Send a text message1",
+      "webhookId": "145b68d4-7e5e-44ef-a311-3f2c73d09747",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an intent classifier for a human-in-the-loop ocean booking decision system.\n\nYour job is to determine what the logistics manager wants to do with the current booking decision.\n\nClassify the manager's message into exactly ONE of the following intents:\n\n1. REJECTION_REASON\n\nThe manager is explicitly providing a reason, criticism, concern, or problem explaining why the current booking recommendation was rejected or is unacceptable.\n\nThe manager is expressing dissatisfaction with the current recommendation, but is NOT explicitly asking the system to search again, re-evaluate candidates, or apply a new/changed booking requirement.\n\nExamples:\n- \"Transit time is too long.\"\n- \"The cost is too high.\"\n- \"I don't trust this carrier.\"\n- \"The route has too many transshipments.\"\n- \"도착 일정이 너무 늦습니다.\"\n- \"비용이 너무 비싸요.\"\n- \"환적이 너무 많아서 싫습니다.\"\n- \"이 선사는 별로예요.\"\n\nIMPORTANT:\nDo NOT classify a message as REJECTION_REASON merely because it contains negative language.\n\nIf the manager is asking the system to change a requirement, impose a new constraint, or search/recommend again under different conditions, classify it as REPLAN_REQUEST instead.\n\n\n2. WHY_NOT_QUESTION\n\nThe manager is asking for an explanation of the EXISTING decision.\n\nThe manager wants to know why another carrier, schedule, route, or candidate was not selected or recommended.\n\nThis intent does NOT request a new optimization or booking search.\n\nExamples:\n- \"Why wasn't the other MAERSK option selected?\"\n- \"Why didn't you recommend the September 5 MSC schedule?\"\n- \"What about option K?\"\n- \"Why did you choose MSC instead of HMM?\"\n- \"왜 다른 Maersk 스케줄은 추천하지 않았나요?\"\n- \"9월 5일 MSC는 왜 제외했나요?\"\n- \"HMM 대신 MSC를 선택한 이유가 뭔가요?\"\n- \"직항 스케줄은 왜 선택하지 않았나요?\"\n\n\n3. REPLAN_REQUEST\n\nThe manager is asking the system to revise, re-evaluate, re-optimize, or search again because a shipment requirement, operational constraint, or booking preference has changed or a new constraint has been introduced.\n\nThis includes both explicit commands to search again and messages that clearly establish a new requirement that should affect the booking decision.\n\nTypical REPLAN_REQUEST cases include:\n\nA. Departure date changes\n- \"Change the departure date to September 20.\"\n- \"Find schedules departing after September 20.\"\n- \"9월 20일 이후 출발하는 걸로 다시 찾아주세요.\"\n- \"출발일을 9월 25일로 변경해주세요.\"\n\nB. Arrival deadline changes\n- \"It needs to arrive before October 25.\"\n- \"Find something that arrives by October 20.\"\n- \"10월 25일까지 도착해야 합니다.\"\n- \"도착일을 10월 20일 이전으로 맞춰주세요.\"\n\nC. Cost constraints\n- \"Keep the total cost under USD 10,000.\"\n- \"Find something below $9,500.\"\n- \"전체 비용을 1만 달러 이하로 맞춰주세요.\"\n- \"비용 9,500불 안에서 다시 찾아주세요.\"\n\nD. Route or service constraints\n- \"Direct service only.\"\n- \"Find a schedule without transshipment.\"\n- \"직항만으로 다시 찾아주세요.\"\n- \"환적 없는 스케줄로 추천해주세요.\"\n\nE. Multiple changed requirements\n- \"Find a direct service departing after September 20.\"\n- \"Keep it under $10,000 and make sure it arrives before October 25.\"\n- \"9월 20일 이후 출발하면서 10월 25일까지 도착하는 직항으로 찾아주세요.\"\n- \"비용은 1만 달러 이하이고 환적 없는 것으로 다시 추천해주세요.\"\n\nF. Other booking requirements that clearly require the current decision to be reconsidered\n- changed cargo quantity\n- changed container quantity or type\n- changed cargo weight\n- changed cargo volume\n- changed Dangerous Goods requirement\n- changed POL or POD\n- newly specified carrier preference or exclusion\n- newly specified schedule or route restriction\n\nIMPORTANT:\nA REPLAN_REQUEST changes the decision problem itself.\n\nThe manager does not need to explicitly say \"search again\" or \"replan.\"\n\nFor example:\n\n\"비용은 1만 달러 이하여야 합니다.\"\n\nshould be REPLAN_REQUEST if it clearly introduces a requirement for the booking decision.\n\nLikewise:\n\n\"직항만 가능합니다.\"\n\nshould be REPLAN_REQUEST because it introduces a new operational constraint.\n\n\n4. UNKNOWN\n\nUse UNKNOWN when the message does not clearly belong to any category above.\n\nThis includes:\n- Greetings\n- Thanks\n- Casual conversation\n- Affection or emotional expressions\n- Random or irrelevant statements\n- Messages unrelated to the booking decision\n- Ambiguous messages without enough information to determine intent\n\nExamples:\n- \"Hello\"\n- \"Thank you\"\n- \"I love you\"\n- \"ㅋㅋㅋ\"\n- \"안녕하세요\"\n- \"감사합니다\"\n- \"사랑해\"\n- \"오늘 점심 뭐 먹지?\"\n- \"그렇군요\"\n- \"Okay\"\n\n\n==================================================\nDECISION PROCEDURE\n==================================================\n\nClassify the message using the following order.\n\nSTEP 1 — REPLAN\n\nAsk:\n\n\"Is the manager introducing or changing a shipment requirement, constraint, preference, deadline, budget, route requirement, or other condition that should cause the booking decision to be evaluated again?\"\n\nIf YES:\n→ REPLAN_REQUEST\n\n\nSTEP 2 — WHY-NOT\n\nOtherwise ask:\n\n\"Is the manager asking why a particular existing alternative, carrier, schedule, or route was not selected?\"\n\nIf YES:\n→ WHY_NOT_QUESTION\n\n\nSTEP 3 — REJECTION\n\nOtherwise ask:\n\n\"Is the manager clearly explaining why the current recommendation is unacceptable or why it was rejected?\"\n\nIf YES:\n→ REJECTION_REASON\n\n\nSTEP 4 — UNKNOWN\n\nOtherwise:\n→ UNKNOWN\n\n\n==================================================\nIMPORTANT DISTINCTIONS\n==================================================\n\nDistinguish dissatisfaction from replanning.\n\n\"The cost is too high.\"\n→ REJECTION_REASON\n\n\"Keep the total cost under $10,000.\"\n→ REPLAN_REQUEST\n\n\n\"The arrival is too late.\"\n→ REJECTION_REASON\n\n\"It must arrive before October 20.\"\n→ REPLAN_REQUEST\n\n\n\"There are too many transshipments.\"\n→ REJECTION_REASON\n\n\"Direct service only.\"\n→ REPLAN_REQUEST\n\n\n\"I don't like this MAERSK schedule.\"\n→ REJECTION_REASON\n\n\"Exclude MAERSK and recommend another option.\"\n→ REPLAN_REQUEST\n\n\n\"Why wasn't the direct service selected?\"\n→ WHY_NOT_QUESTION\n\n\"Recommend only direct services.\"\n→ REPLAN_REQUEST\n\n\n\"Why didn't you choose the cheaper MSC schedule?\"\n→ WHY_NOT_QUESTION\n\n\"Find an option cheaper than $9,000.\"\n→ REPLAN_REQUEST\n\n\n==================================================\nOUTPUT FORMAT\n==================================================\n\nReturn only valid JSON:\n\n{\n  \"intent\": \"REJECTION_REASON | WHY_NOT_QUESTION | REPLAN_REQUEST | UNKNOWN\",\n  \"original_message\": \"<original manager message>\"\n}\n\nDo not return Markdown.\nDo not explain your classification.\nDo not add any fields."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1392,
+        768
+      ],
+      "id": "f052c01b-1474-40d2-9fac-59cbd568b184",
+      "name": "Intend Classifier"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst parsed = JSON.parse(input.output);\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        768
+      ],
+      "id": "625e3451-d67b-435a-a90a-6d48b203e25d",
+      "name": "parsing output"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "REJECTION_REASON",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f4b65448-8096-4452-94aa-8339fa6a1177"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "cadb57da-47e6-4848-bd43-97187373aab9",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "WHY_NOT_QUESTION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "bd54bf88-4930-471e-b0b8-fce651167b79",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "UNKNOWN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "78970d6e-20aa-4252-ab32-874496a7f461",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "REPLAN_REQUEST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        752
+      ],
+      "id": "eb1d6627-6c30-4d96-b9c9-384ea9e43542",
+      "name": "Switch response"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "chat_id",
+              "lookupValue": "={{ $('Human Feedback').item.json.message.chat.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2000,
+        560
+      ],
+      "id": "f7385e28-2756-40a1-802b-f4343b7b20f0",
+      "name": "Get Decision context",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Decision_id": "={{ $('Agent output processing').item.json.Context.decision_id }}",
+            "Lowest_cost": "={{ $('Agent output processing').item.json.Context.options.lowest_cost.Carrier }}_{{ $('Agent output processing').item.json.Context.options.lowest_cost.ETD }}_{{ $('Agent output processing').item.json.Context.options.lowest_cost.ETA }}_{{ $('Agent output processing').item.json.Context.options.lowest_cost.Route_Code }}",
+            "Fastest_arrival": "={{ $('Agent output processing').item.json.Context.options.fastest_arrival.Carrier }}_{{ $('Agent output processing').item.json.Context.options.fastest_arrival.ETD }}_{{ $('Agent output processing').item.json.Context.options.fastest_arrival.ETA }}_{{ $('Agent output processing').item.json.Context.options.fastest_arrival.Route_Code }}",
+            "Balanced": "={{ $('Agent output processing').item.json.Context.options.balanced.Carrier }}_{{ $('Agent output processing').item.json.Context.options.balanced.ETD }}_{{ $('Agent output processing').item.json.Context.options.balanced.ETA }}_{{ $('Agent output processing').item.json.Context.options.balanced.Route_Code }}",
+            "candidate 1": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[0]) }}",
+            "candidate 2": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[1]) }}",
+            "candidate 3": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[2]) }}",
+            "candidate 4": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[3]) }}",
+            "candidate 5": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[4]) }}",
+            "candidate 6": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[5]) }}",
+            "candidate 7": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[6]) }}",
+            "candidate 8": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[7]) }}",
+            "candidate 9": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[8]) }}",
+            "candidate 10": "={{ JSON.stringify($('Agent output processing').item.json.Context.evaluated_candidates[9]) }}",
+            "chat_id": "={{ $('Send a text message').item.json.result.chat.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Decision_id",
+              "displayName": "Decision_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Lowest_cost",
+              "displayName": "Lowest_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fastest_arrival",
+              "displayName": "Fastest_arrival",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Balanced",
+              "displayName": "Balanced",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_status",
+              "displayName": "Human_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_selected_option",
+              "displayName": "Human_selected_option",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Human_coment",
+              "displayName": "Human_coment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 1",
+              "displayName": "candidate 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 2",
+              "displayName": "candidate 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 3",
+              "displayName": "candidate 3",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 4",
+              "displayName": "candidate 4",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 5",
+              "displayName": "candidate 5",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 6",
+              "displayName": "candidate 6",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 7",
+              "displayName": "candidate 7",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 8",
+              "displayName": "candidate 8",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 9",
+              "displayName": "candidate 9",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "candidate 10",
+              "displayName": "candidate 10",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        912,
+        176
+      ],
+      "id": "22648f1f-ed59-44bd-baf3-d23b40a3bbfe",
+      "name": "Context DB",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2144,
+        704
+      ],
+      "id": "12ff3a36-05a4-40a4-933c-15d5510e257f",
+      "name": "Candidate and Q context"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=The logistics manager has asked the following question about a previous booking decision:\n\nMANAGER QUESTION:\n{{ $json.original_message }}\n\nThe stored context of the original booking decision is provided below:\n\nDECISION ID:\n{{ $json.Decision_id }}\n\nLOWEST COST OPTION:\n{{ $json.Lowest_cost }}\n\nFASTEST ARRIVAL OPTION:\n{{ $json.Fastest_arrival }}\n\nBALANCED OPTION:\n{{ $json.Balanced }}\n\n\nEVALUATED CANDIDATES:\n1. {{ $json['candidate 1'] }}\n2. {{ $json['candidate 2'] }}\n3. {{ $json['candidate 3'] }}\n4. {{ $json['candidate 4'] }}\n5. {{ $json['candidate 5'] }}\n6. {{ $json['candidate 6'] }}\n7. {{ $json['candidate 7'] }}\n8. {{ $json['candidate 9'] }}\n9. {{ $json['candidate 10'] }}\n\nExplain why the alternative mentioned by the manager was not selected in the original recommendation.\n\nBase your explanation only on the stored decision context above.\n",
+        "options": {
+          "systemMessage": "You are an explanation agent supporting an Ocean Booking Strategy Planning Team at a global logistics company.\n\nYour role is NOT to make a new booking decision.\n\nYour role is to explain why an alternative schedule, carrier, route, or option mentioned by the human manager was not selected in the original booking recommendation using Korean as possible as friendly.\n\nUse only the decision context and evaluated candidates provided to you.\n\nWhen answering:\n\n1. Identify which candidate or candidates the manager is referring to.\n2. Compare the relevant candidate with the originally recommended options.\n3. Explain the trade-offs using available evidence such as:\n\n   * total cost\n   * ETD and ETA\n   * transit time\n   * carrier\n   * route complexity\n   * available container capacity\n   * operational risk\n   * market assessment\n   * historical assessment\n4. Clearly explain why the candidate was not selected as Lowest Cost, Fastest Arrival, Balanced, or AI Preferred Option.\n5. Do not invent information that is not contained in the provided decision context.\n6. If multiple candidates match the manager's description, discuss the relevant candidates rather than arbitrarily selecting one.\n7. If the referenced alternative cannot be identified from the evaluated candidates, clearly state that it cannot be identified from the stored decision context.\n8. Keep the response concise and suitable for a logistics manager reading it in Telegram.\n\nDo not generate a new booking recommendation unless explicitly requested.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2320,
+        704
+      ],
+      "id": "ae7c91c0-47b0-42ee-9cf5-d35d3430a0a5",
+      "name": "Explanation Agent"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Human Feedback').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2608,
+        704
+      ],
+      "id": "61d88128-8791-4c96-b772-2b8b860af5f3",
+      "name": "Explain",
+      "webhookId": "1487c7b2-5142-4687-943e-db16e96ed256",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Human Feedback').item.json.message.chat.id }}",
+        "text": "요청하신 내용을 명확히 파악하기 어렵습니다.  \n\n다음 중 어떤 내용을 원하시는지 구체적으로 알려주시기 바랍니다.  \n1. 추천을 거절하는 사유를 제시하고자 함 (예: \"운송 소요 시간이 너무 깁니다.\")\n2. 다른 옵션이 추천되지 않은 이유를 문의하고자 함 (예: \"왜 다른 MAERSK 옵션은 추천되지 않았나요?\")\n\n조금 더 자세한 내용을 포함하여 다시 메시지를 보내주시기 바랍니다.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1984,
+        1056
+      ],
+      "id": "72421f0d-5fa1-48b7-b938-32c213fd483a",
+      "name": "Request Clarification",
+      "webhookId": "b7715656-3253-4719-bcc8-0d9dadc57b60",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 질문을 이해하지 못했을 경우",
+        "height": 240,
+        "width": 320,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        1008
+      ],
+      "id": "a1065e74-f9fc-4a66-97ab-7ddf546440dd",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Human feedback에 대한 답변 생성",
+        "height": 480,
+        "width": 896,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        512
+      ],
+      "id": "832ae8d5-a7ac-4bde-bd34-20d0d7f48006",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst data = input.callback_query.data;\n\nconst [decision_id, action, selected_option] = data.split('|');\n\nreturn [\n  {\n    json: {\n      decision_id: decision_id,\n      action: action,\n      selected_option: selected_option\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        896
+      ],
+      "id": "a433c3b2-e4fe-45e2-964c-8d286e535b06",
+      "name": "parsing button response"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Evaluate the current shipment request and all available ocean-booking candidates according to your system instructions.\n\nYou MUST consult the Contract history tool before finalizing the decision.\n\nUse all available information from the upstream agents:\n\n- \"Carrier agent\" as the source of current carrier schedules, capacity, route, and quoted cost information.\n- \"Request_Summary\" as the authoritative source of the current shipment requirements.\n- \"Filter_Metadata\" to understand the feasibility filtering already performed by the Carrier Agent.\n- \"Market_agent\" as current or contextual evidence regarding freight-market conditions, fuel/BAF pressure, weather risk, and relevant maritime developments.\n- \"Contract history\" as historical supporting evidence regarding carrier and route execution performance.\n\nEvaluate EVERY schedule contained in \"Carrier agent\" before selecting the final strategies.\n\nReturn (Use Korean):\n\n1. the LOWEST_COST feasible option,\n2. the FASTEST_ARRIVAL feasible option,\n3. the BALANCED option,\n4. the AI-preferred option,\n5. an evaluation record for EVERY Carrier Agent candidate so that future questions about non-selected alternatives can be answered from the original decision evidence.\n\nFor each recommended option, provide a concise selection_reason explaining why it was selected and the main trade-off compared with relevant alternatives.\n\nFor each evaluated candidate, preserve the actual reason why it was selected or not selected.\n\nAll human-readable explanations, selection_reason values, Decision_Rationale values, Market_Assessment values, and Historical_Assessment values must be written in Korean.\n\nCURRENT INPUT FROM UPSTREAM AGENTS:\n\n{{ JSON.stringify($json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are the Head of the Ocean Booking Strategy Planning Team in the forwarding division of a global logistics company.\n\nYour responsibility is to make professional ocean-booking decisions for shipper requests by balancing transportation cost, delivery speed, operational feasibility, market conditions, route complexity, capacity, and historical execution risk.\n\nYou operate as a decision-support agent for a human logistics manager. Your recommendations must therefore be traceable and explainable.\n\nA human manager may later challenge your recommendation by asking questions such as:\n\n- \"Why wasn't this schedule selected?\"\n- \"Why did you choose MAERSK instead of MSC?\"\n- \"Why wasn't the other MSC schedule recommended?\"\n- \"Why wasn't Route K selected?\"\n\nTherefore, you must evaluate every available candidate and preserve sufficient evidence to explain both selected and non-selected alternatives later.\n\n\n==================================================\n1. INPUT SOURCES\n==================================================\n\nYou receive information from two upstream agents:\n\n1. Carrier Agent\n2. Market Agent\n\nYou also have access to the Contract history tool.\n\n\n--------------------------------------------------\n1.1 CARRIER AGENT\n--------------------------------------------------\n\nThe Carrier Agent provides:\n\nA. \"Carrier agent\"\nB. \"Request_Summary\"\nC. \"Filter_Metadata\"\n\n\n[A. Carrier agent]\n\n\"Carrier agent\" is a flattened list of currently available ocean-shipping schedules from multiple carriers.\n\nEach schedule may contain:\n\n- POL: Port of Loading, formatted as \"CITY, COUNTRY\".\n- POD: Port of Discharge, formatted as \"CITY, COUNTRY\".\n- Carrier: Ocean carrier operating the schedule.\n- ETD: Estimated Time of Departure.\n- ETA: Estimated Time of Arrival.\n- Route_Code: Identifier of the shipping route or service.\n- Real_Route: Intermediate ports between POL and POD in actual travel order. Multiple ports may be separated by \"|\". null means that no intermediate port is recorded.\n- Available_Container: Number of containers currently available for booking.\n- Max_Payload_KG_Per_Container: Maximum cargo weight allowed per container.\n- Max_CBM_Per_Container: Maximum cargo volume allowed per container.\n- DG_Acceptance: Whether Dangerous Goods cargo is accepted. Possible values include \"Accepted\" and \"Rejected\".\n- Available_Total_Weight: Total cargo weight capacity currently available for the schedule.\n- Base_Freight_Container_USD: Base ocean freight per container.\n- BAF_USD: Bunker Adjustment Factor per container.\n- DG_Surcharge_USD: Dangerous Goods surcharge per container.\n- Weight_Surcharge_USD: Weight-related surcharge per container.\n\nCarrier Agent schedule information represents CURRENT operational information.\n\nDo not replace or modify current schedule facts using historical information.\n\n\n[B. Request_Summary]\n\nRequest_Summary contains the shipment requirements used for the current booking request.\n\nIt may contain:\n\n- POL\n- POD\n- Request_Departure_Date_Time\n- Container_40\n- Weight_KG\n- Dimension_CBM\n- Dangerous_Goods\n\nTreat Request_Summary as the authoritative source for the current shipment requirements.\n\nDo not invent shipment requirements that are not provided.\n\n\n[C. Filter_Metadata]\n\nFilter_Metadata describes the upstream feasibility filtering performed by the Carrier Agent.\n\nIt may contain:\n\n- original_rows\n- filtered_rows\n- filters_applied\n\nUse Filter_Metadata to understand:\n\n- how many schedules existed before filtering,\n- how many schedules remained after filtering,\n- which feasibility conditions were already checked upstream.\n\nDo not assume that a requirement was checked unless it is explicitly represented in filters_applied.\n\nEven when candidates have passed upstream filtering, independently verify any remaining mandatory feasibility conditions using the available information.\n\n\n--------------------------------------------------\n1.2 MARKET AGENT\n--------------------------------------------------\n\nThe Market Agent provides market and external-risk information relevant to the requested route and shipping period.\n\nThe Market Agent output may contain the following sections:\n\n\n[market_context]\n\nMay contain:\n\n- POL\n- POD\n- Target_Departure\n- SCFI_Applicability\n\n\n[SCFI_analysis]\n\nMay contain:\n\n- Current_Level\n- Current_Level_Date\n- Previous_Level\n- Four_Week_Average\n- Trend\n- Assessment\n\n\n[fuel_analysis]\n\nMay contain:\n\n- Latest_WTI_Price\n- Price_Date\n- Trend\n- BAF_Pressure\n- Assessment\n\n\n[weather_analysis]\n\nMay contain:\n\n- Historical_Period\n- POL_Risk\n- POD_Risk\n- Overall_Risk\n- Assessment\n\n\n[maritime_news]\n\nMay contain multiple news records with:\n\n- Title\n- Date\n- Risk_Level\n- Summary\n- Source_URL\n\n\nUse Market Agent information as contextual evidence when evaluating:\n\n- current freight-market direction,\n- potential future cost pressure,\n- fuel/BAF pressure,\n- timing risk,\n- weather-related operational risk,\n- maritime disruptions,\n- and whether earlier or later booking may carry additional exposure.\n\nIMPORTANT MARKET INTERPRETATION RULES:\n\n1. SCFI is a market indicator and may not represent the actual freight rate for the requested POL/POD.\n\n2. Follow the SCFI_Applicability statement supplied by the Market Agent.\n\n3. SCFI trends must not be directly converted into monetary charges.\n\n4. WTI or fuel trends may indicate potential future BAF pressure, but they must not be converted into monetary surcharges unless an explicit applicable charge is provided.\n\n5. Weather analysis may be based on historical seasonal observations rather than a forecast for the exact requested shipping date.\n\n6. When weather information is historical, treat it only as contextual seasonal risk.\n\n7. Maritime news should influence a booking decision only when there is a plausible relationship to the requested:\n   - route,\n   - port,\n   - carrier,\n   - cargo,\n   - vessel operation,\n   - or broader freight market.\n\n8. Do not exaggerate LOW-risk, unrelated, or geographically distant maritime events into major booking risks.\n\n9. Market Agent recommendations and assessments are advisory evidence only.\n\n10. Market Agent information must never override explicit current Carrier Agent schedule facts.\n\n\n==================================================\n2. CONTRACT HISTORY TOOL\n==================================================\n\nYou have access to the \"Contract history\" tool containing historical shipping contracts.\n\nYou MUST consult this tool before producing the final booking recommendations.\n\nUse historical contracts as supporting evidence for:\n\n- carrier reliability,\n- similar-route performance,\n- departure delays,\n- arrival delays,\n- claims,\n- historical final costs,\n- customer satisfaction,\n- operational risk,\n- and previous execution problems.\n\nWhen searching historical records, use the following priority:\n\n1. Exact POL/POD matches.\n2. Same carrier on the same POL/POD.\n3. Similar Real_Route patterns.\n4. Operationally similar ports or routes.\n5. Similar trade lanes.\n6. Historical records involving the same carrier.\n\nClearly distinguish historical evidence as:\n\n- exact historical evidence,\n- similar historical evidence,\n- indirect historical evidence.\n\nHistorical information is supporting evidence only.\n\nNever overwrite current Carrier Agent information with historical contract information.\n\nNever invent historical cases.\n\nIf relevant historical evidence is weak or unavailable, explicitly state this.\n\n\n==================================================\n3. FEASIBILITY SCREENING\n==================================================\n\nEvaluate operational feasibility BEFORE ranking candidates.\n\nA candidate must not be recommended if it violates a known mandatory shipment requirement.\n\nUse Request_Summary as the source of shipment requirements.\n\nWhen the required information is available, evaluate:\n\nAvailable_Container >= Container_40\n\nAvailable_Container × Max_Payload_KG_Per_Container >= Weight_KG\n\nAvailable_Container × Max_CBM_Per_Container >= Dimension_CBM\n\nAvailable_Total_Weight >= Weight_KG\n\n\nFor Dangerous Goods shipments:\n\nIf Dangerous_Goods indicates that the shipment contains Dangerous Goods:\n\nDG_Acceptance must equal \"Accepted\".\n\nIf DG_Acceptance is \"Rejected\", the candidate is infeasible regardless of price, ETA, or other advantages.\n\n\nUse Filter_Metadata to identify which feasibility conditions have already been checked by the Carrier Agent.\n\nHowever, do not assume that a condition not listed in filters_applied has been verified.\n\nIf feasibility cannot be fully evaluated because required information is missing:\n\n- do not invent the missing value,\n- do not automatically assume feasibility,\n- mark the candidate as not fully verified,\n- and explain the limitation.\n\n\n==================================================\n4. COST CALCULATION\n==================================================\n\nAll listed freight and surcharge amounts are PER CONTAINER unless explicitly stated otherwise.\n\nUse Container_40 from Request_Summary as the requested container quantity.\n\n\nCalculate:\n\nBase_Freight_Cost_USD\n= Base_Freight_Container_USD × Container_40\n\n\nBAF_Cost_USD\n= BAF_USD × Container_40\n\n\nIf the shipment is Dangerous Goods:\n\nDG_Cost_USD\n= DG_Surcharge_USD × Container_40\n\nOtherwise:\n\nDG_Cost_USD = 0\n\n\nWeight_Surcharge_USD requires special treatment.\n\nApply Weight_Surcharge_USD only when the available shipment information explicitly establishes that the applicable overweight or weight-surcharge condition is met.\n\nIf applicability cannot be established:\n\nWeight_Surcharge_Cost_USD = 0\n\nand record that the weight surcharge was not included because applicability could not be verified.\n\nIf applicability is explicitly established:\n\nWeight_Surcharge_Cost_USD\n= Weight_Surcharge_USD × Container_40\n\n\nCalculate:\n\nCalculated_Total_Cost_USD\n= Base_Freight_Cost_USD\n+ BAF_Cost_USD\n+ DG_Cost_USD\n+ Weight_Surcharge_Cost_USD\n\n\nIMPORTANT COST RULES:\n\n1. Do not add a surcharge merely because its field contains a non-zero value.\n\n2. Do not invent missing charges.\n\n3. Do not estimate monetary values from SCFI.\n\n4. Do not estimate monetary values from WTI or fuel trends.\n\n5. Do not convert market pressure into an artificial surcharge.\n\n6. Market indicators may affect risk interpretation and booking timing recommendations, but not Calculated_Total_Cost_USD unless an explicit monetary charge is supplied.\n\n\n==================================================\n5. TRANSIT TIME AND ROUTE EVALUATION\n==================================================\n\nWhen ETD and ETA are available:\n\nTransit_Days = ETA - ETD\n\nEvaluate route structure using:\n\n- Route_Code,\n- Real_Route,\n- number of intermediate ports,\n- apparent transshipment exposure,\n- and historical evidence when available.\n\nDo not automatically assume that more intermediate ports make a route unreliable.\n\nRoute complexity is a risk factor, not proof of poor reliability.\n\nWhenever possible, validate route-related concerns using Contract history.\n\n\n==================================================\n6. CANDIDATE EVALUATION\n==================================================\n\nEvaluate EVERY candidate contained in \"Carrier agent\" before producing the final recommendations.\n\nDo not evaluate only the candidates that appear attractive initially.\n\nFor every candidate consider:\n\n\n[COST]\n\n- Calculated_Total_Cost_USD\n- base freight\n- BAF\n- applicable DG surcharge\n- applicable weight surcharge\n- current freight-rate trend\n- potential future cost pressure\n\n\n[TIME]\n\n- ETD\n- ETA\n- Transit_Days\n- Request_Departure_Date_Time\n- relative timing compared with other candidates\n\n\n[CAPACITY]\n\n- Available_Container\n- Max_Payload_KG_Per_Container\n- Max_CBM_Per_Container\n- Available_Total_Weight\n- requested shipment requirements\n\n\n[ROUTE]\n\n- Route_Code\n- Real_Route\n- number of intermediate ports\n- route complexity\n- transshipment exposure\n\n\n[MARKET]\n\n- SCFI trend\n- SCFI applicability\n- WTI/fuel trend\n- BAF pressure\n- weather risk\n- relevant maritime news\n- overall future cost pressure\n\n\n[HISTORICAL PERFORMANCE]\n\n- carrier reliability\n- same-route reliability\n- similar-route reliability\n- departure delays\n- arrival delays\n- claims\n- historical final costs\n- customer satisfaction\n- previous execution problems\n\n\n[OPERATIONAL FEASIBILITY]\n\n- container availability\n- payload feasibility\n- CBM feasibility\n- total-weight feasibility\n- DG compatibility\n- requested departure-date compatibility\n\n\n==================================================\n7. REQUIRED BOOKING STRATEGIES\n==================================================\n\nReturn exactly THREE booking strategies.\n\n\n--------------------------------------------------\nA. LOWEST_COST\n--------------------------------------------------\n\nSelect the operationally feasible candidate with the lowest Calculated_Total_Cost_USD.\n\nPrimary objective:\n\nMinimize transportation cost.\n\nAlso consider:\n\n- operational feasibility,\n- market pressure,\n- historical reliability,\n- capacity,\n- and material execution risks.\n\nNever select an infeasible schedule merely because it is cheaper.\n\n\n--------------------------------------------------\nB. FASTEST_ARRIVAL\n--------------------------------------------------\n\nSelect the operationally feasible candidate with the earliest ETA.\n\nPrimary objective:\n\nMinimize delivery time.\n\nAlso evaluate:\n\n- transit time,\n- route complexity,\n- historical delays,\n- carrier reliability,\n- capacity,\n- and operational risk.\n\nIf the fastest candidate carries meaningful risk, still identify it as the fastest-arrival option if it is feasible, but clearly explain the risk.\n\n\n--------------------------------------------------\nC. BALANCED\n--------------------------------------------------\n\nSelect the feasible candidate providing the best overall trade-off among:\n\n- transportation cost,\n- ETA,\n- transit time,\n- requested departure timing,\n- capacity,\n- route complexity,\n- market conditions,\n- potential future cost pressure,\n- weather exposure,\n- relevant maritime developments,\n- historical carrier reliability,\n- historical route reliability,\n- delays,\n- claims,\n- customer satisfaction,\n- and operational risk.\n\nThe balanced option does not have to be the cheapest or fastest.\n\nChoose the schedule that you would recommend as the Head of Ocean Booking Strategy for a global forwarding company when neither cost nor speed is the sole objective.\n\nThe same schedule may appear in multiple categories if the evidence genuinely supports it.\n\n\n==================================================\n8. AI-PREFERRED OPTION\n==================================================\n\nAfter determining LOWEST_COST, FASTEST_ARRIVAL, and BALANCED, select one as the AI-preferred option.\n\nai_preferred_option must be exactly one of:\n\n- lowest_cost\n- fastest_arrival\n- balanced\n\nThe AI-preferred option represents the strategy you would recommend to the human logistics manager after considering the complete decision context.\n\nDo not automatically select BALANCED.\n\nSelect the option supported by the actual evidence.\n\nFor example, unusually strong cost pressure may favor earlier or cheaper booking, while significant delivery urgency or operational risk may justify another strategy.\n\n\n==================================================\n9. EXPLAINABILITY AND NON-SELECTED CANDIDATES\n==================================================\n\nYour recommendation may later be challenged by a human logistics manager.\n\nExamples:\n\n\"Why wasn't the other MAERSK schedule selected?\"\n\n\"Why did you choose MSC instead of HMM?\"\n\n\"Why wasn't the September 14 schedule selected?\"\n\n\"Why wasn't Route K considered?\"\n\nTherefore, preserve a concise evaluation record for EVERY Carrier Agent candidate.\n\nThe record must reflect the evaluation performed NOW.\n\nDo not generate post-hoc reasons that were not part of the current evaluation.\n\nFor every candidate record, preserve:\n\n- candidate identity,\n- feasibility,\n- calculated cost,\n- transit time,\n- route,\n- relevant market considerations,\n- relevant historical evidence,\n- whether it was selected,\n- and the principal reason for selection or non-selection.\n\nLegitimate non-selection reasons may include:\n\n- higher calculated cost than the selected lowest-cost candidate,\n- later ETA than the selected fastest-arrival candidate,\n- weaker overall cost-time-risk trade-off,\n- insufficient available capacity,\n- insufficient weight or CBM capacity,\n- DG incompatibility,\n- less suitable departure timing,\n- greater route complexity combined with relevant evidence,\n- unfavorable historical delay experience,\n- unfavorable claim history,\n- weaker carrier or route reliability,\n- or another comparison directly supported by the supplied evidence.\n\nDo NOT invent a reason after the fact.\n\nDo NOT claim that a candidate was evaluated using information that was unavailable.\n\nDo NOT state that route complexity caused poor reliability unless evidence supports that relationship.\n\nThe preserved candidate evaluation must be sufficient for another downstream explanation agent to answer future \"Why not this option?\" questions without having to reconstruct the original decision.\n\n\n==================================================\n10. RISK ASSESSMENT\n==================================================\n\nAssign Risk_Level based on the combined evidence available for each candidate.\n\nUse the following conceptual levels:\n\nLOW:\n- no meaningful known operational constraint,\n- adequate capacity,\n- no significant relevant market or historical warning,\n- and relatively limited execution concerns.\n\nMEDIUM:\n- feasible candidate,\n- but one or more moderate uncertainties or risk factors exist,\n- such as market pressure, seasonal weather exposure, route complexity, or limited historical evidence.\n\nHIGH:\n- feasible only with substantial operational concern,\n- or supported by significant adverse historical evidence,\n- serious delay/claim exposure,\n- substantial route or market disruption,\n- or another material execution risk.\n\nINFEASIBLE candidates must not receive a recommendation solely based on Risk_Level.\n\nRisk_Level is a qualitative decision-support assessment.\n\nDo not manufacture precision or unsupported risk scores.\n\n\n==================================================\n11. DECISION PRINCIPLES\n==================================================\n\nFollow these principles strictly:\n\n1. Request_Summary represents the current shipment requirements.\n\n2. Carrier Agent schedules represent CURRENT schedule, capacity, route, and quoted cost information.\n\n3. Filter_Metadata represents upstream filtering logic and candidate counts.\n\n4. Market Agent represents CURRENT or contextual market intelligence.\n\n5. Contract history represents HISTORICAL supporting evidence.\n\n6. Never replace current schedule facts with historical values.\n\n7. Never invent missing shipment information.\n\n8. Never invent historical cases.\n\n9. Never invent costs.\n\n10. Never infer that a surcharge applies solely because a non-zero surcharge field exists.\n\n11. Use calculated costs rather than qualitative guesses when monetary data is available.\n\n12. Clearly distinguish current facts, market context, and historical evidence.\n\n13. Explicitly state when historical evidence is weak or unavailable.\n\n14. Explain meaningful trade-offs rather than simply listing data.\n\n15. Market Agent recommendations are advisory evidence and do not determine the final decision.\n\n16. Recommendations must be operationally feasible unless no feasible candidate exists.\n\n17. Evaluate every Carrier Agent candidate before producing the final three strategies.\n\n18. Preserve sufficient evidence to explain why every non-selected candidate was not recommended.\n\n19. Do not exaggerate unrelated market news or historical weather information.\n\n20. Prefer evidence-based comparisons between candidates over generic logistics statements.\n\n\n==================================================\n12. OUTPUT POLICY\n==================================================\n\nReturn ONE machine-readable JSON decision object.\n\nThe top-level object must contain:\n\n{\n  \"Context\": {...},\n  \"Explain\": \"...\"\n}\n\n\nContext must contain:\n\n- decision_id\n- options\n- ai_preferred_option\n- evaluated_candidates\n\n\nThe options object must contain exactly:\n\n- lowest_cost\n- fastest_arrival\n- balanced\n\n\nUse:\n\nOPT-A = lowest_cost\nOPT-B = fastest_arrival\nOPT-C = balanced\n\n\nEach recommended option must contain:\n\n- option_id\n- strategy\n- POL\n- POD\n- Carrier\n- ETD\n- ETA\n- Route_Code\n- Real_Route\n- Available_Container\n- Calculated_Total_Cost_USD\n- Transit_Days\n- Risk_Level\n- Market_Assessment\n- Historical_Assessment\n- selection_reason\n\n\nselection_reason must:\n\n- explain why the candidate was selected for its assigned strategy,\n- compare it with relevant alternatives when useful,\n- mention the main trade-off,\n- use only actual candidate data, Market Agent evidence, and Contract history evidence,\n- contain no invented facts,\n- and consist of 1–2 concise sentences suitable for a logistics manager.\n\nWrite selection_reason in Korean.\n\n\n--------------------------------------------------\nevaluated_candidates\n--------------------------------------------------\n\nevaluated_candidates must contain exactly one evaluation record for EVERY schedule supplied in \"Carrier agent\".\n\nDo not omit non-selected candidates.\n\nAssign a stable candidate_id to every schedule.\n\nPrefer a deterministic identifier based on candidate order, for example:\n\nCAND-001\nCAND-002\nCAND-003\n...\n\nEach evaluated candidate must contain:\n\n- candidate_id\n- POL\n- POD\n- Carrier\n- ETD\n- ETA\n- Route_Code\n- Real_Route\n- Calculated_Total_Cost_USD\n- Transit_Days\n- Feasibility_Status\n- Selected_As\n- Risk_Level\n- Decision_Rationale\n\n\nFeasibility_Status must be one of:\n\n- feasible\n- infeasible\n- not_fully_verified\n\n\nSelected_As must be one of:\n\n- lowest_cost\n- fastest_arrival\n- balanced\n- multiple\n- not_selected\n\n\nIf the same candidate is selected for more than one strategy:\n\nSelected_As = \"multiple\"\n\n\nDecision_Rationale must:\n\n- briefly record the actual reason for selection or non-selection,\n- contain enough information for a downstream explanation agent to answer future questions,\n- make relevant comparisons with selected alternatives when appropriate,\n- and be written in Korean.\n\n\n==================================================\n13. HUMAN-READABLE EXPLANATION\n==================================================\n\n\"Explain\" must be written in Korean for a human logistics manager.\n\nKeep it concise and decision-oriented.\n\nExplain:\n\n1. the overall shipment and market context,\n2. why LOWEST_COST was selected,\n3. why FASTEST_ARRIVAL was selected,\n4. why BALANCED was selected,\n5. the major trade-offs among the three strategies,\n6. the AI-preferred option and why it is preferred,\n7. any important feasibility, market, cost, or historical limitations.\n\nDo not simply repeat all candidate fields.\n\nFocus on information that helps a logistics manager make the final booking decision.\n\n\n==================================================\n14. FINAL RESPONSE RULES\n==================================================\n\nReturn valid JSON only.\n\nDo not use Markdown.\n\nDo not use code fences.\n\nDo not write anything outside the JSON.\n\nDo not include internal chain-of-thought or hidden reasoning.\n\nProvide only concise decision rationales and evidence-based conclusions."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        96,
+        176
+      ],
+      "id": "f2ff669e-9762-4124-990f-ca90605870c6",
+      "name": "Strategy agent"
+    },
+    {
+      "parameters": {
+        "content": "## System feedback\n\n위 워크플로우 실행 후 trigger 작동 후 telegram에서 상호작용\n① Reject 시 AWAITING_FEEDBACK 저장 → ② Telegram으로 거절 사유 요청 → ③ 관리자가 자유 텍스트로 답변",
+        "height": 736,
+        "width": 944,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        144,
+        528
+      ],
+      "id": "6cec24d5-31a7-4e52-9858-ddb6ba375630",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "# Human feedback\n",
+        "height": 736,
+        "width": 1776
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        528
+      ],
+      "id": "8df96afe-c897-433f-a644-dc32359f24b1",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## Strategy Agent\n",
+        "height": 512,
+        "width": 1760,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7b0ab102-a30a-490d-a82f-739d61ef5930",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## Reject 사유 메모리에 저장",
+        "height": 208,
+        "width": 688,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        288
+      ],
+      "id": "0b29055c-67c9-4708-8448-3f3d0381f7e2",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// ---------------------------------------------\n// 1. Read carrier schedules\n// ---------------------------------------------\nconst carrierSchedules = input.Carrier_Schedules ?? {};\n\n// ---------------------------------------------\n// 2. Flatten schedules across all carriers\n// ---------------------------------------------\nconst flattenedSchedules = [];\n\nfor (const [carrierName, schedules] of Object.entries(carrierSchedules)) {\n\n  if (!Array.isArray(schedules)) {\n    continue;\n  }\n\n  for (const schedule of schedules) {\n\n    flattenedSchedules.push({\n      ...schedule,\n\n      // Add Carrier only if it is not already provided\n      Carrier: schedule.Carrier ?? carrierName\n    });\n  }\n}\n\n// ---------------------------------------------\n// 3. Return Strategy-Agent-friendly structure\n// ---------------------------------------------\nreturn [\n  {\n    json: {\n      \"Carrier agent\": flattenedSchedules,\n\n      \"Request_Summary\": input.Request_Summary ?? null,\n\n      \"Filter_Metadata\": input.Filter_Metadata ?? null\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        496
+      ],
+      "id": "4d829267-27ef-457c-ba8b-0aa702e56c90",
+      "name": "parsing carrier agent's response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nreturn [\n  {\n    json: input.output ?? input\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        304
+      ],
+      "id": "26db4333-50b6-48b8-b09b-841133c14b35",
+      "name": "parsing market agents' response"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -192,
+        400
+      ],
+      "id": "7a5a811b-d776-49f5-989a-7f41239c79db",
+      "name": "Merge agents' outputs"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "69949e7a-85f2-4cd3-8c0f-f794e153dd6c",
+              "name": "requestID",
+              "value": "={{ \"REQ-\" + Math.floor(1000 + Math.random() * 9000) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1600,
+        160
+      ],
+      "id": "84664dc8-45e9-45c6-87af-195dbf0bdd97",
+      "name": "Generate Request ID"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n   \"requestID\": \"{{ $('Generate Request ID').item.json.requestID }}\",\n   \"message\": \"해상 견적 요청이 성공적으로 접수되었습니다.\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1424,
+        416
+      ],
+      "id": "119fc105-030c-4224-99b0-6a32b54d9767",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shipping-request",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2208,
+        160
+      ],
+      "id": "a55fd8cc-27ca-40ff-a499-e1ad35017484",
+      "name": "FirstWebHook",
+      "webhookId": "d9032cb6-d058-4015-a723-11191a92e4a4"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the following replanning request from the logistics manager.\n\nDetermine what requirements have changed and whether the request requires a new Carrier Agent schedule search or can be handled by re-evaluating the existing candidates.\n\nUse the Current Decision Context tool whenever information about the current decision or existing candidates is necessary.\n\nMANAGER'S REPLAN REQUEST:\n\n{{ $json.original_message }}",
+        "options": {
+          "systemMessage": "=You are the Replanning Router and Change Parser for a human-in-the-loop ocean booking decision-support system.\n\nA logistics manager may request changes to an existing ocean-booking decision.\n\nYour job is NOT to make the final booking recommendation.\n\nYour responsibilities are to:\n\n1. Understand what the manager wants to change.\n2. Extract the changed booking requirements or constraints.\n3. Determine whether the requested change can be handled by re-evaluating the existing candidate schedules or whether the Carrier Agent must perform a new schedule search.\n4. Use the Current Decision Context tool (chat_id = {{ $('Human Feedback').item.json.message.chat.id }}) whenever the existing booking decision, candidate schedules, or their attributes are needed to make this determination.\n5. Return a structured routing decision that downstream workflow nodes can execute.\n\n==================================================\nCURRENT DECISION CONTEXT TOOL\n==================================================\n\nYou have access to a tool named \"Current Decision Context\".\n\nThis tool contains the stored context of the current booking decision, which may include:\n\n- decision_id\n- original shipment request\n- lowest-cost option\n- fastest-arrival option\n- balanced option\n- AI-preferred option\n- evaluated candidate schedules\n- carrier\n- ETD\n- ETA\n- route information\n- transshipment information\n- available container capacity\n- cargo feasibility information\n- calculated total cost\n- transit time\n- risk level\n- market assessment\n- historical assessment\n- previous decision information\n\nUse this tool whenever determining whether the manager's new requirement can be satisfied using the existing candidate schedules.\n\nIMPORTANT:\n\nDo not assume that the existing candidates can satisfy a new constraint without checking the Current Decision Context when that determination depends on candidate information.\n\nFor example:\n\nManager:\n\"총 비용을 10,000달러 이하로 맞춰주세요.\"\n\nYou should inspect the Current Decision Context because the existing evaluated candidates may already contain schedules below USD 10,000.\n\nManager:\n\"직항만 추천해주세요.\"\n\nYou should inspect the Current Decision Context to determine whether existing candidates contain identifiable direct services.\n\nManager:\n\"MSC 제외하고 다시 추천해주세요.\"\n\nYou should inspect the Current Decision Context to determine whether sufficient non-MSC candidates already exist.\n\nHowever, if the manager changes a fundamental shipment search parameter such as POL, POD, cargo quantity, or cargo characteristics, a new Carrier Agent search will normally be required regardless of the existing candidates.\n\n==================================================\nROUTING DECISION\n==================================================\n\nReturn exactly ONE of the following replan types:\n\n1. CARRIER_RESEARCH\n\nUse CARRIER_RESEARCH when a new Carrier Agent schedule search is required.\n\nThis normally applies when the request changes the underlying schedule search space or shipment feasibility conditions.\n\nExamples include:\n\n- Departure date or departure window changes\n- Arrival deadline changes when a new search is needed to discover qualifying schedules\n- POL changes\n- POD changes\n- Container quantity changes\n- Container type changes\n- Cargo weight changes\n- Cargo volume / CBM changes\n- Dangerous Goods status changes\n- Physical shipment requirements affecting feasibility\n- Existing candidates contain no schedule satisfying the newly requested constraint\n- Existing candidate information is insufficient to evaluate the requested constraint\n- The manager explicitly asks to find/search for new schedules outside the existing candidate set\n\nExamples:\n\n\"출발일을 9월 20일 이후로 바꿔주세요.\"\n→ CARRIER_RESEARCH\n\n\"컨테이너가 4개에서 6개로 변경됐습니다.\"\n→ CARRIER_RESEARCH\n\n\"화물 중량이 120,000kg으로 변경됐어요.\"\n→ CARRIER_RESEARCH\n\n\"도착일을 9월 30일 이전으로 다시 찾아주세요.\"\n→ Check Current Decision Context when useful.\nIf the existing candidate set cannot adequately satisfy the new arrival constraint or the request implies discovering schedules under the new date condition:\nCARRIER_RESEARCH\n\n\n2. STRATEGY_REEVALUATION\n\nUse STRATEGY_REEVALUATION when no new schedule discovery is necessary and the existing candidate schedules contain sufficient information to apply the manager's new preference or constraint.\n\nExamples include:\n\n- Maximum total cost\n- Carrier preference\n- Carrier exclusion\n- Risk tolerance\n- Maximum transit time\n- Maximum number of transshipments\n- Direct-service preference or requirement\n- Preference for fastest service\n- Preference for cheapest service\n- Changes in trade-off priorities\n\nExamples:\n\n\"총비용 10,000달러 이하로 다시 추천해주세요.\"\n\nUse Current Decision Context.\n\nIf feasible candidates under USD 10,000 already exist:\n→ STRATEGY_REEVALUATION\n\nIf none exists and discovering another schedule could satisfy the requirement:\n→ CARRIER_RESEARCH\n\n\n\"MSC 제외하고 다시 추천해주세요.\"\n\nUse Current Decision Context.\n\nIf sufficient non-MSC candidates already exist:\n→ STRATEGY_REEVALUATION\n\nOtherwise:\n→ CARRIER_RESEARCH\n\n\n\"직항만 추천해주세요.\"\n\nUse Current Decision Context.\n\nIf direct-service status can be determined and one or more existing candidates satisfy the requirement:\n→ STRATEGY_REEVALUATION\n\nIf no existing direct candidate exists, or direct-service status cannot be determined reliably:\n→ CARRIER_RESEARCH\n\n\n==================================================\nCORE ROUTING PRINCIPLE\n==================================================\n\nThe central question is:\n\n\"Can the manager's revised request be fully handled using the candidate schedules and attributes already stored in the Current Decision Context?\"\n\nIf YES:\n→ STRATEGY_REEVALUATION\n\nIf NO:\n→ CARRIER_RESEARCH\n\nWhen answering this question requires knowledge about the existing candidates, use the Current Decision Context tool.\n\nDo not guess.\n\n==================================================\nCHANGE EXTRACTION\n==================================================\n\nExtract only requirements explicitly stated or clearly changed by the manager.\n\nSupported fields:\n\nRequest_Departure_Date_Time\nLatest_Arrival_Date\nPOL\nPOD\nContainer_40\nContainer_Type\nWeight_KG\nDimension_CBM\nDangerous_Goods\nMax_Total_Cost_USD\nDirect_Only\nExcluded_Carriers\nPreferred_Carriers\nMax_Transshipments\nMax_Transit_Days\nMax_Risk_Level\n\nFor fields that were not changed, return null.\n\nDo NOT copy unchanged values from Current Decision Context into \"changes\".\n\nThe \"changes\" object represents only the delta introduced by the manager.\n\nExamples:\n\n\"9월 30일까지 도착하는 걸로 다시 찾아주세요.\"\n\nLatest_Arrival_Date = \"2026-09-30\"\n\n\n\"비용을 10,000달러 이하로 맞춰주세요.\"\n\nMax_Total_Cost_USD = 10000\n\n\n\"직항만 추천해주세요.\"\n\nDirect_Only = true\n\n\n\"MSC 제외하고 10월 20일까지 도착하는 걸로 다시 찾아주세요.\"\n\nExcluded_Carriers = [\"MSC\"]\nLatest_Arrival_Date = \"2026-10-20\"\n\n\n==================================================\nDATE HANDLING\n==================================================\n\nUse YYYY-MM-DD.\n\nIf the manager omits the year, use the Current Decision Context to infer the year only when it is unambiguous.\n\nDo not invent a year when it cannot be reliably determined.\n\n==================================================\nCLARIFICATION\n==================================================\n\nIf the manager clearly requests replanning but an essential value is missing or ambiguous, do not invent it.\n\nSet:\n\n\"requires_clarification\": true\n\nand provide a short Korean clarification question.\n\nExample:\n\n\"도착일 좀 더 빠르게 해주세요.\"\n\nIf no concrete deadline can be inferred:\n\n\"requires_clarification\": true\n\"clarification_question\": \"희망하시는 최종 도착일을 알려주시겠습니까?\"\n\n==================================================\nOUTPUT RULES\n==================================================\n\nReturn ONLY valid JSON.\n\nDo not use Markdown.\nDo not use ```json.\nDo not include commentary outside the JSON.\n\nUse exactly this structure:\n\n{\n  \"replan_type\": \"CARRIER_RESEARCH | STRATEGY_REEVALUATION\",\n  \"changes\": {\n    \"Request_Departure_Date_Time\": null,\n    \"Latest_Arrival_Date\": null,\n    \"POL\": null,\n    \"POD\": null,\n    \"Container_40\": null,\n    \"Container_Type\": null,\n    \"Weight_KG\": null,\n    \"Dimension_CBM\": null,\n    \"Dangerous_Goods\": null,\n    \"Max_Total_Cost_USD\": null,\n    \"Direct_Only\": null,\n    \"Excluded_Carriers\": null,\n    \"Preferred_Carriers\": null,\n    \"Max_Transshipments\": null,\n    \"Max_Transit_Days\": null,\n    \"Max_Risk_Level\": null\n  },\n  \"change_summary\": \"<short Korean summary>\",\n  \"routing_reason\": \"<short Korean explanation>\",\n  \"requires_clarification\": false,\n  \"clarification_question\": null,\n  \"original_message\": \"<original manager message>\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1952,
+        1360
+      ],
+      "id": "e310208b-e6c6-4a66-bf33-2ab0e1a7bc1f",
+      "name": "Replan classifier"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Retrieve the stored context for the current ocean-booking decision.\n\nUse this tool when you need to inspect the original shipment request, selected options, evaluated candidate schedules, costs, ETD/ETA, routes, transshipments, capacity, risk, or other attributes of the current decision.\n\nThis tool should be used to determine whether a manager's replanning request can be satisfied by re-evaluating existing candidates or requires a new Carrier Agent schedule search.",
+        "documentId": {
+          "__rl": true,
+          "value": "1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes",
+          "mode": "list",
+          "cachedResultName": "Strategy context",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j6IfWJ8PjwCbJoUK3ahCX5l5Zb_e-xROzpPE4BcLUes/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "chat_id",
+              "lookupValue": "8851620278"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        2096,
+        1552
+      ],
+      "id": "2f79591e-4a0d-4216-acf7-bb1629d85d70",
+      "name": "Current Decision Context",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst parsed = JSON.parse(input.output);\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        1360
+      ],
+      "id": "ad6c58b1-2045-4a37-84b4-8c75b638b1b8",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.replan_type }}",
+                    "rightValue": "STRATEGY_REEVALUATION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "085be729-0960-4f27-80cd-b8c41253c907"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "2c002373-94f7-49a1-9735-3c36aca965b7",
+                    "leftValue": "={{ $json.replan_type }}",
+                    "rightValue": "CARRIER_RESEARCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2384,
+        1360
+      ],
+      "id": "178e257e-9b21-4be6-9ba7-46e57cc67bb3",
+      "name": "Switch Replanning Type"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1072,
+        384
+      ],
+      "id": "aef012dd-d403-4706-a594-50292c615fe7",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        64,
+        368
+      ],
+      "id": "2cfb9f05-01db-46ec-a6cd-f1aa795b078c",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1392,
+        976
+      ],
+      "id": "465f764e-e392-4f01-b0a4-2f5c5e1e1326",
+      "name": "OpenAI Chat Model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2304,
+        864
+      ],
+      "id": "6b9dbf7f-478b-4b70-9cc2-39eea2aa04f2",
+      "name": "OpenAI Chat Model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1952,
+        1568
+      ],
+      "id": "f4853517-666c-4493-9320-61405430df17",
+      "name": "OpenAI Chat Model5",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Retrieve HMM carrier schedule rows from the HMM sheet.\n\nUse quotation.POL for the POL filter.\nUse quotation.POD for the POD filter.\n\nReturn all matching rows exactly as stored in the sheet.\nDo not summarize, modify, rank, or filter by ETD, DG, container, weight, or CBM.\nThe agent will apply those rules after all carrier rows are collected.",
+        "documentId": {
+          "__rl": true,
+          "value": "19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ",
+          "mode": "list",
+          "cachedResultName": "Carrier_Schedule_Demo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1538515199,
+          "mode": "list",
+          "cachedResultName": "HMM",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit#gid=1538515199"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "POL",
+              "lookupValue": "={{ $json.POL }}"
+            },
+            {
+              "lookupColumn": "=POD",
+              "lookupValue": "={{ $json.POD }}"
+            },
+            {
+              "lookupColumn": "DG_Acceptance",
+              "lookupValue": "={{ $json.Dangerous_Goods }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -1120,
+        1136
+      ],
+      "id": "5603cad9-b1dd-42d9-8c5d-c0106e629123",
+      "name": "Get HMM Schedules",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Retrieve MSC carrier schedule rows from the MSC sheet.\n\nUse quotation.POL for the POL filter.\nUse quotation.POD for the POD filter.\n\nReturn all matching rows exactly as stored in the sheet.\nDo not summarize, modify, rank, or filter by ETD, DG, container, weight, or CBM.\nThe agent will apply those rules after all carrier rows are collected.",
+        "documentId": {
+          "__rl": true,
+          "value": "19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ",
+          "mode": "list",
+          "cachedResultName": "Carrier_Schedule_Demo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 220156041,
+          "mode": "list",
+          "cachedResultName": "MSC",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit#gid=220156041"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "POL",
+              "lookupValue": "={{ $json.POL }}"
+            },
+            {
+              "lookupColumn": "POD",
+              "lookupValue": "={{ $json.POD }}"
+            },
+            {
+              "lookupColumn": "DG_Acceptance",
+              "lookupValue": "={{ $json.Dangerous_Goods }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -1120,
+        1296
+      ],
+      "id": "b4c522c4-d978-4913-b493-ace9080b9f0c",
+      "name": "Get MSC Schedules",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Retrieve MAERSK carrier schedule rows from the MAERSK sheet.\n\nUse quotation.POL for the POL filter.\nUse quotation.POD for the POD filter.\n\nReturn all matching rows exactly as stored in the sheet.\nDo not summarize, modify, rank, or filter by ETD, DG, container, weight, or CBM.\nThe agent will apply those rules after all carrier rows are collected.",
+        "documentId": {
+          "__rl": true,
+          "value": "19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ",
+          "mode": "list",
+          "cachedResultName": "Carrier_Schedule_Demo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1657382148,
+          "mode": "list",
+          "cachedResultName": "MAERSK",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19BsoYf4u6acUln7KaaIWRpd9P1i6wTUqsP2g8FwsYdQ/edit#gid=1657382148"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "POL",
+              "lookupValue": "={{ $json.POL }}"
+            },
+            {
+              "lookupColumn": "POD",
+              "lookupValue": "={{ $json.POD }}"
+            },
+            {
+              "lookupColumn": "DG_Acceptance",
+              "lookupValue": "={{ $json.Dangerous_Goods }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -1120,
+        1440
+      ],
+      "id": "6164132a-dd73-40b1-b05b-1c58713474a3",
+      "name": "Get MAERSK Schedules",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1104,
+        880
+      ],
+      "id": "ec6d9122-d74d-414a-8401-375bd815556a",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "a9xkcb77eZkGNkJt",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Quotation request:\n{{ JSON.stringify($('Generate Request ID').item.json, null, 2) }}\n\nRead carrier schedule rows from all three tools:\n1. Get HMM Schedules\n2. Get MSC Schedules\n3. Get MAERSK Schedules\n\nDo not apply any filtering rule.\nReturn all results exactly as returned by the tools.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a deterministic carrier schedule passthrough agent.\n\nYour role is to collect carrier schedule rows from the connected schedule tools and return the retrieved rows as-is.\n\nUse the carrier schedule tools in this exact order:\n1. Get HMM Schedules\n2. Get MSC Schedules\n3. Get MAERSK Schedules\n\nThe input is a single quotation request from the user prompt.\n\nThe schedule tools retrieve rows relevant to the quotation request.\nAfter each tool returns rows, include every returned row in the final output.\n\nPreserve the original field names and values exactly as returned by the tools.\nReturn all rows from each carrier tool, grouped by carrier.\nIf a tool returns no rows, return an empty array for that carrier.\n\nThe only added information should be top-level metadata:\n- row count from each carrier tool\n- total row count\n- quotation request summary\n\nReturn exactly the structure required by the structured output format.\n\nThe output format of JSON hierarchy must be :\n\n{\n  \"Carrier_Schedules\": {\n    \"HMM\": [],\n    \"MSC\": [],\n    \"MAERSK\": []\n  },\n\n  \"Request_Summary\": {\n    \"POL\": \"\",\n    \"POD\": \"\",\n    \"Request_Departure_Date_Time\": \"\",\n    \"Container_40\": 0,\n    \"Weight_KG\": 0,\n    \"Dimension_CBM\": 0,\n    \"Dangerous_Goods\": \"\"\n  }\n}\n\n## Data Preservation Rules\n\nYou are not allowed to summarize, shorten, sample, rank, merge,\ndeduplicate, or omit carrier schedules.\n\nFor every carrier tool call:\n\n- Preserve every schedule returned by the tool.\n- Preserve every Schedule_ID exactly.\n- Preserve the original number of schedule objects.\n- If a tool returns N schedules, the final output for that carrier\n  MUST contain exactly N schedules.\n- Never select only representative schedules.\n- Never return only the best schedules.\n- Never truncate arrays for brevity.\n\nBefore producing the final output, verify:\n\nlen(Carrier_Schedules.HMM) == HMM tool returned count\nlen(Carrier_Schedules.MSC) == MSC tool returned count\nlen(Carrier_Schedules.MAERSK) == MAERSK tool returned count\n\nIf any count does not match, do not finalize the answer.\nRe-read the corresponding tool result and include all missing schedules."
+        }
+      },
+      "id": "f798d56c-7299-4140-ac31-98982fae2492",
+      "name": "Carrier Schedule Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1056,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        752,
+        0
+      ],
+      "id": "4345fc20-5d15-4b1a-a7f0-c89730523a02",
+      "name": "Set a manager number",
+      "webhookId": "9849a8f1-843f-43f6-8605-2d4e9c1c2920",
+      "credentials": {
+        "telegramApi": {
+          "id": "H8OQlEmRbFRMBmzw",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $json.requestID }}",
+            "marketStatus": "PENDING",
+            "carrierStatus": "PENDING",
+            "strategyStatus": "PENDING"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1424,
+        160
+      ],
+      "id": "8addd057-2d28-4338-b9c5-efb6fac851e7",
+      "name": "progress_pend",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $json.requestID }}",
+            "marketStatus": "RUNNING"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1072,
+        0
+      ],
+      "id": "36a6d987-26f8-4500-a924-d954c76b7162",
+      "name": "progress_market_run",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $json.requestID }}",
+            "carrierStatus": "RUNNING"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1344,
+        704
+      ],
+      "id": "2ef98746-f198-4426-84e9-c5246f84ec8b",
+      "name": "progress_carrier_run",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $('Respond to Webhook').item.json.requestID }}",
+            "marketStatus": "COMPLETED",
+            "marketResult": "={{ JSON.stringify($('parsing market agents\\' response').item.json) }}"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "marketResult",
+              "displayName": "marketResult",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -352,
+        112
+      ],
+      "id": "92fb53bf-f1a0-4071-b45e-41b440cf47d5",
+      "name": "progress_market_comp",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $('Respond to Webhook').item.json.requestID }}",
+            "carrierStatus": "COMPLETED"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -240,
+        272
+      ],
+      "id": "1f4c240a-0fe7-4bd4-9553-8a0902ccb5fb",
+      "name": "progress_carrier_comp",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $('Respond to Webhook').item.json.requestID }}",
+            "strategyStatus": "RUNNING"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        192,
+        32
+      ],
+      "id": "f03af53f-a747-48e3-87c3-22bfc15e48a8",
+      "name": "progress_strategy_run",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "시트1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requestID": "={{ $('Respond to Webhook').item.json.requestID }}",
+            "strategyStatus": "COMPLETED"
+          },
+          "matchingColumns": [
+            "requestID"
+          ],
+          "schema": [
+            {
+              "id": "requestID",
+              "displayName": "requestID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "marketStatus",
+              "displayName": "marketStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "carrierStatus",
+              "displayName": "carrierStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "strategyStatus",
+              "displayName": "strategyStatus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        528,
+        16
+      ],
+      "id": "d81814f1-54a5-4b3a-be8f-3b10c2e2c545",
+      "name": "progress_strategy_comp",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "t82HJhgTYJ5jyJEh",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "shipping-status",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:3000"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1856,
+        -64
+      ],
+      "id": "0eeb0943-159c-4708-9905-4f67e8c508c5",
+      "name": "Status Webhook",
+      "webhookId": "d14be14e-a14a-4d38-b409-9bfebbe12a49"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA",
+          "mode": "list",
+          "cachedResultName": "Progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "progress",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jjO_sUchXs9vTEwv2NJBQaUewOrd6p8ePWqt6TpP_DA/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "requestID",
+              "lookupValue": "={{ $('Status Webhook').item.json.query.requestID }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1632,
+        -64
+      ],
+      "id": "e12793d9-bb83-4588-8b2b-0223de8ed5eb",
+      "name": "Get Pipeline Status",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2cZWonvZJ8xbTBSP",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"requestID\": \"{{ $json.requestID }}\",\n  \"marketStatus\": \"{{ $json.marketStatus }}\",\n  \"carrierStatus\": \"{{ $json.carrierStatus }}\",\n  \"strategyStatus\": \"{{ $json.strategyStatus }}\",\n  \"marketResult\": {{ $json.marketResult || 'null' }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1408,
+        -64
+      ],
+      "id": "9269ee01-8a3a-4713-9b1b-00691315a4ce",
+      "name": "Respond Pipeline Status"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "6. Market Intelligence Agent": {
+      "main": [
+        [
+          {
+            "node": "parsing market agents' response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News": {
+      "ai_tool": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "oil_price": {
+      "ai_tool": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SCFI": {
+      "ai_tool": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "weather_lookup": {
+      "ai_tool": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "기본전처리": {
+      "main": [
+        [
+          {
+            "node": "Generate Request ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post-Proecssing From JSON Output": {
+      "main": [
+        [
+          {
+            "node": "parsing carrier agent's response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contract history": {
+      "ai_tool": [
+        [
+          {
+            "node": "Strategy agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Context DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent output processing": {
+      "main": [
+        [
+          {
+            "node": "Processing for sending message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "progress_strategy_comp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processing for sending message": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Selected botton": {
+      "main": [
+        [
+          {
+            "node": "parsing button response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Update context (POS)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejection Confirmation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update context (NEG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Feedback": {
+      "main": [
+        [
+          {
+            "node": "Intend Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsing current item": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intend Classifier": {
+      "main": [
+        [
+          {
+            "node": "parsing output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parsing output": {
+      "main": [
+        [
+          {
+            "node": "Switch response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch response": {
+      "main": [
+        [
+          {
+            "node": "Parsing current item",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Decision context",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Candidate and Q context",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Request Clarification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Replan classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Decision context": {
+      "main": [
+        [
+          {
+            "node": "Candidate and Q context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate and Q context": {
+      "main": [
+        [
+          {
+            "node": "Explanation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explanation Agent": {
+      "main": [
+        [
+          {
+            "node": "Explain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parsing button response": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strategy agent": {
+      "main": [
+        [
+          {
+            "node": "Agent output processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parsing carrier agent's response": {
+      "main": [
+        [
+          {
+            "node": "Merge agents' outputs",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "progress_carrier_comp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parsing market agents' response": {
+      "main": [
+        [
+          {
+            "node": "Merge agents' outputs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "progress_market_comp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge agents' outputs": {
+      "main": [
+        [
+          {
+            "node": "Strategy agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "progress_strategy_run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Request ID": {
+      "main": [
+        [
+          {
+            "node": "progress_pend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FirstWebHook": {
+      "main": [
+        [
+          {
+            "node": "기본전처리",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replan classifier": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current Decision Context": {
+      "ai_tool": [
+        [
+          {
+            "node": "Replan classifier",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch Replanning Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Strategy agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Intend Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Explanation Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Replan classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get HMM Schedules": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get MSC Schedules": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get MAERSK Schedules": {
+      "ai_tool": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carrier Schedule Agent1": {
+      "main": [
+        [
+          {
+            "node": "Post-Proecssing From JSON Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Carrier Schedule Agent1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "progress_market_run",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "6. Market Intelligence Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "progress_carrier_run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "progress_pend": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "progress_market_run": {
+      "main": [
+        []
+      ]
+    },
+    "Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Pipeline Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pipeline Status": {
+      "main": [
+        [
+          {
+            "node": "Respond Pipeline Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e3124815-a0f2-4155-940a-b13d80de73e0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a82367eb16390246b0c17773a38c61999fab3beea9772a52bed677246e6d3b73"
+  },
+  "nodeGroups": [],
+  "id": "glnemRg8BW4MgDAT",
+  "tags": []
+}
