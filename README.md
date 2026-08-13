@@ -1,4 +1,5 @@
-# 🚢 Multi-Agent 기반 선사 부킹 지원 시스템
+# 🚢 Multi-AI Agent 기반 선사 부킹 지원 시스템
+<i>포워더의 선사 부킹 의사결정 보조 수단 지능화</i>
 
 > **찾는 시간은 줄이고, 판단의 품질은 높이고, 경험은 회사에 남깁니다.**
 
@@ -83,7 +84,7 @@ AI의 추천만 저장하는 것이 아닙니다.
     <iframe
       width="560"
       height="315"
-      src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+      src="https://youtu.be/K5-dtzIJy6w"
       title="Demo Video"
       frameborder="0"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -114,7 +115,7 @@ AI의 추천만 저장하는 것이 아닙니다.
 사용자가 출발항·도착항, 희망 출항일, 화물 정보, 컨테이너 수량 등의 견적 요청을 입력하면 다음 workflow가 시작됩니다.
 
 <p align="center">
-  <img src="./image/.png" alt="Demo" width="800">
+  <img src="./img/image.png" alt="Demo" width="800">
 </p>
 
 ---
