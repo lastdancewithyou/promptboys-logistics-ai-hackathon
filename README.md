@@ -68,45 +68,19 @@ AI의 추천만 저장하는 것이 아닙니다.
 이를 통해 개인에게 의존하던 실무 경험을 장기적으로 **조직의 의사결정 자산**으로 전환하는 것을 목표로 합니다.
 
 ---
-
 ## 🎬 MVP
 
 > 실제 견적 요청부터 Multi-Agent 분석, 전략 추천, 담당자 피드백 및 재계획까지 하나의 workflow로 구성했습니다.
 
-- 🎥 **시연 영상 (YouTube)**  
+### 🎥 시연 영상 (YouTube)
 
-<!-- 🎥 시연 영상 (YouTube) Demo -->
-<section class="demo-video">
-  <h2>🎥 시연 영상 (YouTube)</h2>
-  <p>Coming Soon</p>
+[![시연 영상](https://img.youtube.com/vi/K5-dtzIJy6w/maxresdefault.jpg)](https://www.youtube.com/watch?v=K5-dtzIJy6w)
 
-  <div class="video-container">
-    <iframe
-      width="560"
-      height="315"
-      src="https://youtu.be/K5-dtzIJy6w"
-      title="Demo Video"
-      frameborder="0"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-      allowfullscreen>
-    </iframe>
-  </div>
-</section>
+▶️ **[YouTube에서 시연 영상 보기](https://www.youtube.com/watch?v=K5-dtzIJy6w)**
 
-<!-- 🌐 웹 페이지 Demo -->
-<section class="demo-page">
-  <h2>🌐 웹 페이지 Demo</h2>
-  <p>Coming Soon</p>
+### 🌐 웹 페이지 Demo
 
-  <a
-    href="https://hyundai-glovis-maritime-logistics-agent.ai.studio/"
-    target="_blank"
-    rel="noopener noreferrer"
-    class="demo-link"
-  >
-    웹 페이지 바로가기 →
-  </a>
-</section>
+👉 **[웹 페이지 바로가기](https://hyundai-glovis-maritime-logistics-agent.ai.studio/)**
 
 ---
 
