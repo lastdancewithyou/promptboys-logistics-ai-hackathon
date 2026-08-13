@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>n8n 연결 테스트</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; }
+  input, button, textarea { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; font-size: 14px; }
+  button { background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 16px; }
+  button:hover { background: #1d4ed8; }
+  pre { background: #f3f4f6; padding: 12px; border-radius: 6px; white-space: pre-wrap; margin-top: 16px; }
+  label { font-size: 13px; color: #444; }
+</style>
+</head>
+<body>
+  <h2>n8n Webhook 연결 테스트</h2>
+
+  <label>n8n Webhook URL (Test URL 또는 Production URL)</label>
+  <input id="webhookUrl" type="text" placeholder="https://내계정.app.n8n.cloud/webhook/shipping-request">
+
+  <label>요청 데이터 (JSON 형태로 자유롭게 수정 가능)</label>
+  <textarea id="payloadInput" rows="10">{
+  "POL": "BUSAN, KOREA",
+  "POD": "LOS ANGELES, USA",
+  "Name": "Seoyeon Lee",
+  "Company": "Mirae Auto Parts",
+  "Country": "Korea",
+  "TEL": "+82-10-0000-0022",
+  "E-mail": "request22@demo-company-22.example",
+  "Incoterms": "DAP",
+  "Dangerous_Goods": "Yes",
+  "Request_Departure_Date_Time": "2026-08-21",
+  "Shipping_Type": "FCL",
+  "Movement_Type": "Door-to-Door",
+  "Commodity_Description": "Lithium-ion battery modules, UN3480",
+  "Weight (kg)": 21600,
+  "Dimension (CBM)": 42.5,
+  "Container 40": 4,
+  "Details": "Class 9 DG. MSDS, UN38.3 test summary and DG declaration available."
+}</textarea>
+
+  <button onclick="sendTest()">n8n으로 요청 보내기</button>
+
+  <pre id="result">여기에 응답 결과가 표시됩니다.</pre>
+
+  <script>
+    async function sendTest() {
+      const url = document.getElementById('webhookUrl').value.trim();
+      const payloadText = document.getElementById('payloadInput').value.trim();
+      const resultBox = document.getElementById('result');
+
+      if (!url) {
+        resultBox.textContent = "먼저 Webhook URL을 입력해주세요.";
+        return;
+      }
+
+      let payload;
+      try {
+        payload = JSON.parse(payloadText);
+      } catch (e) {
+        resultBox.textContent = "요청 데이터 JSON 형식이 올바르지 않습니다: " + e.message;
+        return;
+      }
+
+      resultBox.textContent = "요청 보내는 중...";
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          resultBox.textContent = `요청은 도착했지만 오류 응답입니다. (status: ${res.status})`;
+          return;
+        }
+
+        const data = await res.json();
+        resultBox.textContent = "성공! n8n 응답:\n\n" + JSON.stringify(data, null, 2);
+      } catch (err) {
+        resultBox.textContent = "연결 실패: " + err.message +
+          "\n\n(CORS 오류라면 n8n Webhook 노드 설정에서 응답 헤더에 " +
+          "Access-Control-Allow-Origin: * 를 추가해보세요)";
+      }
+    }
+  </script>
+</body>
+</html>

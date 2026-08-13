@@ -1,0 +1,6 @@
+{
+  "name": "Hyundai Glovis Maritime Logistics Agent",
+  "description": "해상 견적 요청, 멀티 에이전트 파이프라인 분석, 전략안 선택 및 계약 자료 검색 통합 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
